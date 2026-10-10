@@ -885,3 +885,17 @@ input::placeholder, textarea::placeholder { color: #aaa5b8; }
   body { background: #fff; }
 }
 :root .university-link { text-decoration: none; }
+
+/* Keep content clear of the iPhone notch and home indicator. */
+body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+.modal-backdrop { padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+
+.study-shortcuts { flex-wrap: wrap; margin-bottom: 20px; }
+
+.opportunity-filters { flex-wrap: wrap; }
+.opportunity-filters > * { min-width: 0; flex: 1 1 240px; }
+
+.auth-screen { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: #f7f5fc; }
+.auth-card { width: min(100%, 440px); }
+.auth-card input { width: 100%; min-height: 44px; padding: 10px; border: 1px solid #ddd5ef; border-radius: 12px; }
+.account-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; background: #f3eefc; flex-wrap: wrap; }

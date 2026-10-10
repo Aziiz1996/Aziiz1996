@@ -1,20 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, CircleHelp, ClipboardList, Clock3, ExternalLink, FileText, GraduationCap, LayoutDashboard, Settings2, Sparkles, Target, Wallet, AlertCircle } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, Check, ChevronLeft, CircleHelp, ClipboardList, Clock3, ExternalLink, FileText, GraduationCap, LayoutDashboard, Settings2, Sparkles, Target, Wallet, AlertCircle, Users, BriefcaseBusiness } from 'lucide-react';
 import { AppProvider, useApp } from './store';
 import { CourseBadge, EmptyState } from './ui';
 import { addDays, buildStudyPlan, daysUntil, financeSummary, formatDate, todayISO } from './logic';
 import { CoursesPage, PlanPage, TasksPage } from './Academic';
+import AuthGate from './AuthGate';
+import UniversityPage from './University';
+import OpportunitiesPage from './Opportunities';
+import GroupsPage from './Groups';
+import PracticePage from './Practice';
+import AssistantPage from './Assistant';
 import NotesPage from './Notes';
 import FinancePage from './Finance';
 import SettingsPage from './Settings';
 import type { Page } from './types';
 
 const NAV = [
+  { id: 'university', label: 'الجامعة — الكلية التطبيقية', icon: GraduationCap },
+  { id: 'opportunities', label: 'فرص سلاسل الإمداد', icon: BriefcaseBusiness },
+  { id: 'groups', label: 'مجموعات المشاريع', icon: Users },
+  { id: 'exams', label: 'جدول الاختبارات', icon: CalendarDays },
+  { id: 'practice', label: 'اختبارات تجريبية', icon: CircleHelp },
+  { id: 'assistant', label: 'المساعد الصوتي', icon: CircleHelp },
   { id: 'dashboard', label: 'نظرة عامة', icon: LayoutDashboard },
   { id: 'courses', label: 'المواد والمحاضرات', icon: GraduationCap },
   { id: 'plan', label: 'خطة المذاكرة', icon: CalendarDays },
   { id: 'tasks', label: 'المهام والاختبارات', icon: ClipboardList },
-  { id: 'notes', label: 'الملاحظات والملخصات', icon: FileText },
+  { id: 'notes', label: 'ملخصات المواد', icon: FileText },
   { id: 'finance', label: 'ميزانيتي', icon: Wallet },
   { id: 'settings', label: 'الإعدادات', icon: Settings2 },
 ] as const;
@@ -51,6 +63,7 @@ function Dashboard() {
   const currency = (value: number) => new Intl.NumberFormat('ar-SA', { style: 'currency', currency: data.settings.currency, maximumFractionDigits: 0 }).format(value);
   const week = Array.from({ length: 7 }, (_, i) => addDays(today, i));
   return <div className="page-content">
+    <div className="row study-shortcuts"><button className="btn btn-secondary" onClick={() => navigate('university')}><GraduationCap size={20} />الجامعة — الكلية التطبيقية</button><button className="btn btn-secondary" onClick={() => navigate('opportunities')}><BriefcaseBusiness size={20} />فرص سلاسل الإمداد</button><button className="btn btn-secondary" onClick={() => navigate('groups')}><Users size={20} />مجموعات المشاريع</button><button className="btn btn-secondary" onClick={() => navigate('notes')}><FileText size={20} />ملخصات المواد</button><button className="btn btn-secondary" onClick={() => navigate('courses')}><GraduationCap size={20} />المحاضرات</button><button className="btn btn-secondary" onClick={() => navigate('exams')}><CalendarDays size={20} />جدول الاختبارات</button><button className="btn btn-secondary" onClick={() => navigate('practice')}><CircleHelp size={20} />اختبارات تجريبية</button></div>
     <section className="welcome-card">
       <div className="welcome-copy"><span className="hero-tag"><Sparkles size={14} /> مساحتك، على طريقتك</span><h1>أهلاً{data.settings.name ? `، ${data.settings.name}` : ' بك'} 👋<br />خطوة اليوم تصنع فرق الغد.</h1><p>دراستك ومواعيدك ومصروفاتك، في مكان يخفف الزحام ويترك لك وقتاً للتركيز.</p><button className="btn btn-primary" onClick={() => navigate(data.courses.length ? 'plan' : 'courses')}>{data.courses.length ? 'شاهد خطة المذاكرة' : 'ابدأ بإضافة موادك'}<ArrowLeft size={18} /></button></div>
       <div className="welcome-art" aria-hidden="true"><span className="orbit" /><span className="art-book" /><span className="art-book-two" /><span className="art-star">✦</span></div>
@@ -85,7 +98,7 @@ function Dashboard() {
 function Shell() {
   const { data, page, navigate, storageError } = useApp();
   const current = NAV.find(n => n.id === page)!;
-  return <div className="app-shell"><aside className="sidebar"><button className="brand" onClick={() => navigate('dashboard')} aria-label="مدار، الصفحة الرئيسية"><span className="brand-icon"><BookOpen size={26} /></span><span><strong>مدار</strong><small className="brand-caption">مساحة لحياتك الدراسية</small></span></button><span className="sidebar-label">مساحتك اليومية</span><nav aria-label="التنقل الرئيسي">{NAV.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'nav-item active' : 'nav-item'} aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id as Page)}><Icon size={20} /><span>{label}</span>{id === 'tasks' && data.tasks.filter(t => !t.completed).length > 0 && <span className="nav-count">{number(data.tasks.filter(t => !t.completed).length)}</span>}</button>)}{data.settings.universityUrl && <a className="nav-item university-link" href={data.settings.universityUrl} target="_blank" rel="noopener noreferrer" aria-label="فتح موقع الجامعة في نافذة جديدة"><ExternalLink size={20} /><span>موقع الجامعة</span></a>}</nav><div className="sidebar-bottom"><span className="sidebar-quote">خفّف الزحام.<br />اترك مساحة للإنجاز.</span><div className="sidebar-profile"><span className="avatar">{data.settings.name?.[0] || 'م'}</span><div><strong>{data.settings.name || 'مساحتي الشخصية'}</strong><span>خطوة بخطوة ✦</span></div><button className="icon-button" aria-label="تعديل الملف والتفضيلات" onClick={() => navigate('settings')}><Settings2 size={18} /></button></div></div></aside><main className="main"><header className="topbar"><div className="topbar-title"><span>مساحتي</span><ChevronLeft size={14} /><strong>{current.label}</strong></div><div className="topbar-actions"><span className="today-label"><CalendarDays size={17} />{formatDate(todayISO(), true)}</span><button className="avatar" aria-label="فتح الإعدادات" onClick={() => navigate('settings')}>{data.settings.name?.[0] || 'م'}</button></div></header>{storageError && <div className="notice danger storage-warning" role="alert">{storageError}</div>}{data.demo && <div className="notice demo-banner"><Sparkles size={18} /><span>هذه بيانات تجريبية. ابدأ ببياناتك من الإعدادات.</span><button className="btn btn-ghost" onClick={() => navigate('settings')}>فتح الإعدادات</button></div>}{page === 'dashboard' && <Dashboard />}{page === 'courses' && <CoursesPage />}{page === 'plan' && <PlanPage />}{page === 'tasks' && <TasksPage />}{page === 'notes' && <NotesPage />}{page === 'finance' && <div className="page-content"><FinancePage /></div>}{page === 'settings' && <div className="page-content"><SettingsPage /></div>}</main></div>;
+  return <div className="app-shell"><aside className="sidebar"><button className="brand" onClick={() => navigate('dashboard')} aria-label="عزيز ليدر، الصفحة الرئيسية"><span className="brand-icon"><BookOpen size={26} /></span><span><strong>عزيز ليدر</strong><small className="brand-caption">مساحة لحياتك الدراسية</small></span></button><span className="sidebar-label">مساحتك اليومية</span><nav aria-label="التنقل الرئيسي">{NAV.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'nav-item active' : 'nav-item'} aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id as Page)}><Icon size={20} /><span>{label}</span>{id === 'tasks' && data.tasks.filter(t => !t.completed).length > 0 && <span className="nav-count">{number(data.tasks.filter(t => !t.completed).length)}</span>}</button>)}{data.settings.universityUrl && <a className="nav-item university-link" href={data.settings.universityUrl} target="_blank" rel="noopener noreferrer" aria-label="فتح موقع الجامعة في نافذة جديدة"><ExternalLink size={20} /><span>موقع الجامعة</span></a>}</nav><div className="sidebar-bottom"><span className="sidebar-quote">خفّف الزحام.<br />اترك مساحة للإنجاز.</span><div className="sidebar-profile"><span className="avatar">{data.settings.name?.[0] || 'م'}</span><div><strong>{data.settings.name || 'مساحتي الشخصية'}</strong><span>خطوة بخطوة ✦</span></div><button className="icon-button" aria-label="تعديل الملف والتفضيلات" onClick={() => navigate('settings')}><Settings2 size={18} /></button></div></div></aside><main className="main"><header className="topbar"><div className="topbar-title"><span>مساحتي</span><ChevronLeft size={14} /><strong>{current.label}</strong></div><div className="topbar-actions"><span className="today-label"><CalendarDays size={17} />{formatDate(todayISO(), true)}</span><button className="avatar" aria-label="فتح الإعدادات" onClick={() => navigate('settings')}>{data.settings.name?.[0] || 'م'}</button></div></header>{storageError && <div className="notice danger storage-warning" role="alert">{storageError}</div>}{data.demo && <div className="notice demo-banner"><Sparkles size={18} /><span>هذه بيانات تجريبية. ابدأ ببياناتك من الإعدادات.</span><button className="btn btn-ghost" onClick={() => navigate('settings')}>فتح الإعدادات</button></div>}{page === 'university' && <UniversityPage />}{page === 'opportunities' && <OpportunitiesPage />}{page === 'groups' && <GroupsPage />}{page === 'practice' && <PracticePage />}{page === 'exams' && <TasksPage key="exams" initialKind="exam" />}{page === 'assistant' && <AssistantPage />}{page === 'dashboard' && <Dashboard />}{page === 'courses' && <CoursesPage />}{page === 'plan' && <PlanPage />}{page === 'tasks' && <TasksPage key="tasks" />}{page === 'notes' && <NotesPage />}{page === 'finance' && <div className="page-content"><FinancePage /></div>}{page === 'settings' && <div className="page-content"><SettingsPage /></div>}</main></div>;
 }
 
-export default function App() { return <AppProvider><Shell /></AppProvider>; }
+export default function App() { return <AuthGate>{session => <AppProvider key={session.user.id} accountData={session.data} accountId={session.user.id}><Shell /></AppProvider>}</AuthGate>; }

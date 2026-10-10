@@ -5,6 +5,7 @@ import { Field, Modal, SectionHeader } from './ui';
 import { demoData } from './demo';
 import { todayISO } from './logic';
 import type { Settings } from './types';
+import { enableStudyReminders, disableStudyReminders } from './reminders';
 
 const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const currencies = { SAR: 'ريال سعودي', AED: 'درهم إماراتي', KWD: 'دينار كويتي', USD: 'دولار أمريكي', EUR: 'يورو', EGP: 'جنيه مصري', QAR: 'ريال قطري', BHD: 'دينار بحريني', OMR: 'ريال عماني' };
@@ -21,6 +22,13 @@ export default function SettingsPage() {
   const [confirmation, setConfirmation] = useState<'demo' | 'reset' | null>(null);
   const [importError, setImportError] = useState('');
   const [formError, setFormError] = useState('');
+  const [reminderBusy, setReminderBusy] = useState(false);
+  async function reminders(enable: boolean) {
+    setReminderBusy(true);
+    try { notify(await (enable ? enableStudyReminders(data.settings) : disableStudyReminders())); }
+    catch { notify('تعذّر تغيير التذكيرات. تحقق من إذن الإشعارات وحاول مرة أخرى.'); }
+    finally { setReminderBusy(false); }
+  }
   function save(event: FormEvent) {
     event.preventDefault();
     if (!validUniversityUrl(form.universityUrl ?? '')) { setFormError('أدخل رابطاً صحيحاً يبدأ بـ https:// لبوابة الجامعة.'); return; }
@@ -36,11 +44,13 @@ export default function SettingsPage() {
       notify('استُعيدت بياناتك بنجاح'); navigate('dashboard');
     } catch (error) { setImportError(error instanceof Error ? error.message : 'تعذّر استيراد النسخة الاحتياطية.'); }
   }
-  const hasData = data.courses.length + data.tasks.length + data.notes.length + data.transactions.length + (data.incomeRules?.length ?? 0) > 0 || JSON.stringify(data.settings) !== JSON.stringify(emptyData().settings) || recoveryRaw !== null;
+  const hasData = (data.projectGroups?.length ?? 0) + data.courses.length + data.tasks.length + data.notes.length + data.transactions.length + (data.incomeRules?.length ?? 0) > 0 || JSON.stringify(data.settings) !== JSON.stringify(emptyData().settings) || recoveryRaw !== null;
   return <>
     <SectionHeader eyebrow="على طريقتك" title="إعدادات مساحتك" description="حدد وقتك وميزانيتك، واحتفظ بنسخة من تفاصيلك." />
     {recoveryRaw !== null && <div className="notice notice-warning"><div><strong>نسختك الأصلية تحتاج استعادة</strong><p>احتفظ بها أولاً. لم نستبدلها بالتغييرات المؤقتة؛ استورد نسخة صالحة أو أكد حذف البيانات لبدء نسخة جديدة.</p></div><button className="btn btn-secondary" onClick={() => downloadFile(`madar-recovery-${todayISO()}.json`, recoveryRaw, 'application/json')}><Download size={18} /> تصدير النسخة الأصلية</button></div>}
-    <div className="settings-grid">
+    <div className="settings-grid"><section className="card settings-card"><h2>تواصل مع صاحب البرنامج</h2><p>للاستفسار عن عزيز ليدر أو إرسال اقتراحات، تواصل مع عزيز عبر سناب شات.</p><a className="btn btn-primary" href="https://www.snapchat.com/add/azaf.5" target="_blank" rel="noopener noreferrer">سناب عزيز — azaf.5</a></section><section className="card settings-card"><h2>تثبيت عزيز ليدر على الآيفون</h2><p>افتح رابط التطبيق في سفاري، واضغط مشاركة، ثم إضافة إلى الشاشة الرئيسية. سيظهر باسم عزيز ليدر وأيقونة البرنامج.</p><p className="muted">يمكن تثبيت أيقونة البرنامج على الشاشة الرئيسية. تسجيل الدخول وبيانات الحساب والمحاضرات تحتاج الإنترنت. الصوت والتذكيرات الأصلية متاحة في نسخة الآيفون؛ نسخة المتصفح لا تفعّلها تلقائياً.</p></section>
+      <section className="card settings-card"><h2>تذكيرات المذاكرة على الآيفون</h2><p className="muted">احفظ أيام المذاكرة ووقتها، ثم فعّل التذكيرات. ستظهر حتى عند إغلاق التطبيق.</p><button className="btn btn-primary" disabled={reminderBusy} onClick={() => void reminders(true)}>تفعيل التذكيرات</button><button className="btn btn-secondary" disabled={reminderBusy} onClick={() => void reminders(false)}>إيقاف التذكيرات</button></section>
+      <section className="card settings-card"><h2>منصة الدروس</h2><p className="muted">حالة الربط: غير متصل. رابط الجامعة يفتح صفحة الدخول فقط؛ لا يجلب الدروس أو الملخصات تلقائياً.</p><p className="muted">الملخصات الحالية تستخرج جملاً من نص الدرس الذي تضيفه. الشرح بالذكاء الاصطناعي يحتاج خدمة إضافية.</p></section>
       <form className="card settings-card" onSubmit={save}>
         <div className="card-heading"><h2><Settings2 size={20} /> تفضيلاتك اليومية</h2></div>
         <div className="form-grid">
@@ -58,8 +68,8 @@ export default function SettingsPage() {
         <button className="btn btn-primary" type="submit"><Save size={18} /> حفظ التفضيلات</button>
       </form>
       <div className="stack">
-        <section className="card settings-card"><div className="card-heading"><h2><ShieldCheck size={20} /> بياناتك معك</h2></div><p className="muted">تُحفظ بياناتك في هذا المتصفح. استخدم التصدير للاحتفاظ بنسخة أو نقلها إلى جهاز آخر. مسح بيانات المتصفح يحذف النسخة المحفوظة.</p><div className="stack"><button className="btn btn-secondary" onClick={() => downloadFile(`madar-${todayISO()}.json`, JSON.stringify(data, null, 2), 'application/json')}><Download size={18} /> تصدير نسخة احتياطية</button><label className="btn btn-secondary import-button"><Upload size={18} /> استيراد نسخة احتياطية<input aria-label="استيراد ملف نسخة احتياطية" type="file" accept="application/json,.json" onChange={e => { const file = e.target.files?.[0]; if (file && (!hasData || window.confirm('استيراد النسخة يستبدل البيانات الحالية. هل تريد المتابعة؟'))) void importBackup(file); e.target.value = ''; }} /></label>{importError && <div role="alert" className="notice danger">{importError}</div>}</div></section>
-        <section className="card settings-card"><h2><Sparkles size={20} /> استكشف مدار</h2><p className="muted">جرّب مثالاً بمواد ومهام ومصروفات توضيحية. {hasData ? 'سيستبدل المثال البيانات الحالية؛ صدّرها أولاً.' : 'يمكنك مسحه عندما تبدأ بإدخال بياناتك.'}</p><button className="btn btn-secondary" onClick={() => setConfirmation('demo')}><Sparkles size={18} /> تحميل بيانات تجريبية</button></section>
+        <section className="card settings-card"><div className="card-heading"><h2><ShieldCheck size={20} /> بياناتك معك</h2></div><p className="muted">تُحفظ بياناتك في حسابك على خادم التطبيق. استخدم التصدير للاحتفاظ بنسخة احتياطية. تسجيل الخروج يفصل حسابك عن الجهاز.</p><div className="stack"><button className="btn btn-secondary" onClick={() => downloadFile(`madar-${todayISO()}.json`, JSON.stringify(data, null, 2), 'application/json')}><Download size={18} /> تصدير نسخة احتياطية</button><label className="btn btn-secondary import-button"><Upload size={18} /> استيراد نسخة احتياطية<input aria-label="استيراد ملف نسخة احتياطية" type="file" accept="application/json,.json" onChange={e => { const file = e.target.files?.[0]; if (file && (!hasData || window.confirm('استيراد النسخة يستبدل البيانات الحالية. هل تريد المتابعة؟'))) void importBackup(file); e.target.value = ''; }} /></label>{importError && <div role="alert" className="notice danger">{importError}</div>}</div></section>
+        <section className="card settings-card"><h2><Sparkles size={20} /> استكشف عزيز ليدر</h2><p className="muted">جرّب مثالاً بمواد ومهام ومصروفات توضيحية. {hasData ? 'سيستبدل المثال البيانات الحالية؛ صدّرها أولاً.' : 'يمكنك مسحه عندما تبدأ بإدخال بياناتك.'}</p><button className="btn btn-secondary" onClick={() => setConfirmation('demo')}><Sparkles size={18} /> تحميل بيانات تجريبية</button></section>
         <section className="card settings-card"><h2>بداية جديدة</h2><p className="muted">احذف بيانات التطبيق من هذا المتصفح. احتفظ بنسخة احتياطية أولاً إذا كنت تحتاجها.</p><button className="btn btn-ghost danger" onClick={() => setConfirmation('reset')}><Trash2 size={18} /> حذف جميع البيانات</button></section>
       </div>
     </div>

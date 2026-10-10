@@ -1,22 +1,34 @@
 {
-  "name": "madar-student-planner",
+  "name": "leader-study",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/build-offline.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --experimental-strip-types --test tests/logic.test.ts",
-    "test:browser": "python3 tests/browser_smoke.py"
+    "test:browser": "python3 tests/browser_smoke.py",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios",
+    "start": "node --experimental-strip-types server/index.mjs",
+    "test:accounts": "node --experimental-strip-types --test tests/accounts.test.mjs"
   },
   "dependencies": {
+    "@capacitor-community/speech-recognition": "^7.0.1",
+    "@capacitor-community/text-to-speech": "^8.0.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
+    "@capacitor/local-notifications": "^8.3.1",
     "lucide-react": "1.55.0",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "@vitejs/plugin-react": "5.1.4",

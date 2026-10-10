@@ -6,3 +6,13 @@ dist/
 !.env.example
 playwright-results/
 .madar/
+
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/Pods/
+ios/**/xcuserdata/
+
+# Personal course documents stay out of source control.
+public/personal-lessons/
+
+.leader-data/

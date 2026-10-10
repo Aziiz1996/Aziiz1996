@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AlertCircle, BookOpen, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, GraduationCap, ListChecks, MapPin, Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
-import { useApp } from './store';
+import { useApp, validUniversityUrl } from './store';
 import { CourseBadge, EmptyState, Field, Modal, SectionHeader } from './ui';
 import { buildStudyPlan, daysUntil, formatDate, todayISO } from './logic';
 import type { Course, Lecture, Priority, Task, TaskKind } from './types';
@@ -67,15 +67,18 @@ function LectureForm({ lecture, initialCourse, onClose }: { lecture?: Lecture; i
   const [start, setStart] = useState(lecture?.start ?? '');
   const [end, setEnd] = useState(lecture?.end ?? '');
   const [location, setLocation] = useState(lecture?.location ?? '');
+  const [attendanceUrl, setAttendanceUrl] = useState(lecture?.attendanceUrl ?? '');
+  const [fileUrl, setFileUrl] = useState(lecture?.fileUrl ?? '');
   const [error, setError] = useState('');
   const conflicting = data.lectures.filter(item => item.id !== lecture?.id && overlaps({ id: '', courseId, day, start, end, location }, item));
   function save(event: FormEvent) {
     event.preventDefault();
     if (!courseId || !data.courses.some(item => item.id === courseId)) { setError('اختر مادة للمحاضرة.'); return; }
+    if (!validUniversityUrl(attendanceUrl) || !validUniversityUrl(fileUrl)) { setError('استخدم روابط صحيحة تبدأ بـ https:// دون بيانات دخول داخل الرابط.'); return; }
     if (end && !start) { setError('أدخل وقت البداية قبل تحديد وقت النهاية.'); return; }
     if (start && end && end <= start) { setError('يجب أن يكون وقت نهاية المحاضرة بعد بدايتها.'); return; }
     update(draft => {
-      const value: Lecture = { id: lecture?.id ?? crypto.randomUUID(), courseId, day, start, end, location: location.trim(), timePending: start && end ? undefined : start && !lecture?.start ? undefined : lecture?.timePending };
+      const value: Lecture = { id: lecture?.id ?? crypto.randomUUID(), courseId, day, start, end, location: location.trim(), attendanceUrl: attendanceUrl.trim(), fileUrl: fileUrl.trim(), timePending: start && end ? undefined : start && !lecture?.start ? undefined : lecture?.timePending };
       const index = draft.lectures.findIndex(item => item.id === value.id);
       if (index >= 0) draft.lectures[index] = value;
       else draft.lectures.push(value);
@@ -94,6 +97,9 @@ function LectureForm({ lecture, initialCourse, onClose }: { lecture?: Lecture; i
       {lecture?.timePending && (!start || !end) && <p className="notice notice-warning">{lecture.timePending}. أدخل الموعد الكامل بعد تأكيده.</p>}
       {(!start || !end) && <p className="field-hint">إذا لم تعرف البداية، لن تُجدول مذاكرة في هذا اليوم من الأسبوع. وإذا غابت النهاية، نترك بقية اليوم بعد البداية خالية حتى تؤكد الموعد.</p>}
       <Field label="المكان (اختياري)"><input className="input" value={location} onChange={event => setLocation(event.target.value)} placeholder="مثال: مبنى ٣، قاعة ٢٠١" maxLength={120} /></Field>
+      <Field label="رابط حضور المحاضرة (اختياري)"><input type="url" className="input" dir="ltr" value={attendanceUrl} onChange={e => setAttendanceUrl(e.target.value.trim())} placeholder="https://…" /></Field>
+      <Field label="رابط ملف المحاضرة (اختياري)"><input type="url" className="input" dir="ltr" value={fileUrl} onChange={e => setFileUrl(e.target.value.trim())} placeholder="https://…" /></Field>
+      <p className="field-hint">أضف الروابط من مودل يدوياً. قد تتطلب تسجيل الدخول عند فتحها؛ الجلب التلقائي غير متصل.</p>
       {end > start && conflicting.length > 0 && <div className="notice notice-warning" role="status"><AlertCircle size={18} /><span>يتعارض هذا الموعد مع {conflicting.map(item => data.courses.find(course => course.id === item.courseId)?.name ?? 'محاضرة أخرى').join('، ')}. يمكنك حفظه إذا كان التعارض مقصوداً.</span></div>}
       {error && <p className="notice notice-error" role="alert">{error}</p>}
       <div className="form-actions"><button type="submit" className="btn btn-primary">حفظ المحاضرة</button><button type="button" className="btn btn-secondary" onClick={onClose}>إلغاء</button></div>
@@ -149,7 +155,7 @@ export function CoursesPage() {
         {data.lectures.some(lecture => !lecture.start || !lecture.end) && <div className="notice notice-warning"><Clock3 size={18} /><span>بعض مواعيد المحاضرات أو نهاياتها تحتاج تأكيداً. عدّلها لنبني خطة مذاكرة أدق.</span></div>}
         <div className="segmented day-tabs" role="group" aria-label="أيام الأسبوع">{DAYS.map((name, index) => <button key={name} className={index === activeDay ? 'active' : ''} aria-pressed={index === activeDay} onClick={() => setActiveDay(index)}>{name}<span className="day-tab-count">{data.lectures.filter(item => item.day === index).length}</span></button>)}</div>
         {lectures.length ? <div className="lecture-list">{lectures.map(lecture => <article className="lecture-row" key={lecture.id}>
-          <div className="lecture-time"><strong dir="ltr">{lecture.start || 'غير مؤكّد'}</strong><span dir="auto">{lecture.start ? lecture.end || 'النهاية غير محددة' : lecture.timePending || 'حدّد وقت البداية'}</span></div><div className="lecture-info"><CourseBadge id={lecture.courseId} />{lecture.location && <span className="muted lecture-location"><MapPin size={14} />{lecture.location}</span>}{(!lecture.start || !lecture.end) && <span className="badge badge-warning">يحتاج تأكيداً</span>}{conflictIds.has(lecture.id) && <span className="badge badge-warning">تعارض</span>}</div>
+          <div className="lecture-time"><strong dir="ltr">{lecture.start || 'غير مؤكّد'}</strong><span dir="auto">{lecture.start ? lecture.end || 'النهاية غير محددة' : lecture.timePending || 'حدّد وقت البداية'}</span></div><div className="lecture-info"><CourseBadge id={lecture.courseId} />{lecture.attendanceUrl && <a href={lecture.attendanceUrl} target="_blank" rel="noopener noreferrer">حضور المحاضرة</a>}{lecture.fileUrl && <a href={lecture.fileUrl} target="_blank" rel="noopener noreferrer">فتح ملف المحاضرة</a>}{lecture.location && <span className="muted lecture-location"><MapPin size={14} />{lecture.location}</span>}{(!lecture.start || !lecture.end) && <span className="badge badge-warning">يحتاج تأكيداً</span>}{conflictIds.has(lecture.id) && <span className="badge badge-warning">تعارض</span>}</div>
           <div className="row"><button className="icon-button" aria-label={`تعديل محاضرة ${data.courses.find(item => item.id === lecture.courseId)?.name ?? ''} يوم ${DAYS[lecture.day]}`} onClick={() => setLectureForm(lecture)}><Pencil size={17} /></button><button className="icon-button danger" aria-label="حذف موعد المحاضرة" onClick={() => setDeletingLecture(lecture)}><Trash2 size={17} /></button></div>
         </article>)}</div> : <div className="day-empty"><CalendarDays size={25} /><p>لا توجد محاضرات يوم {DAYS[activeDay]}.</p></div>}
       </section>
@@ -208,9 +214,9 @@ function TaskForm({ task, initialKind, initialDate, onClose }: { task?: Task; in
   </Modal>;
 }
 
-export function TasksPage() {
+export function TasksPage({ initialKind = 'all' }: { initialKind?: TaskKind | 'all' }) {
   const { data, update, notify, navigate } = useApp();
-  const [kind, setKind] = useState<TaskKind | 'all'>('all');
+  const [kind, setKind] = useState<TaskKind | 'all'>(initialKind);
   const [status, setStatus] = useState('active');
   const [courseId, setCourseId] = useState('all');
   const [query, setQuery] = useState('');

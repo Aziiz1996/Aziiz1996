@@ -1,0 +1,24 @@
+{
+  "name": "عزيز ليدر",
+  "short_name": "عزيز ليدر",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#25194d",
+  "theme_color": "#6b4fe0",
+  "icons": [
+    {
+      "src": "./leader-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./leader-icon-large.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
