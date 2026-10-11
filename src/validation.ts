@@ -5,7 +5,7 @@ export function validUniversityUrl(value: string) {
   try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; } catch { return false; }
 }
 export const emptyData = (): AppData => ({
-  version: 1, incomeRules: [], courses: [], lectures: [], tasks: [], notes: [], transactions: [],
+  version: 1, incomeRules: [], universityEvents: [], courses: [], lectures: [], tasks: [], notes: [], transactions: [],
   settings: { name: '', currency: 'SAR', monthlyBudget: 0, dailyMinutes: 90, studyStart: '18:00', studyDays: [0, 1, 2, 3, 4, 6], universityName: 'الجامعة السعودية الإلكترونية', universityUrl: 'https://lms.ac-seu.com/login/index.php?loginredirect=1' },
 });
 
@@ -34,6 +34,7 @@ export function validateData(value: unknown): value is AppData {
   const courseRef = (id: unknown) => id === '' || courseIds.has(id);
   const optionalTime = (x: unknown) => x === undefined || x === '' || validTime(x);
   if (value.incomeRules !== undefined && (!Array.isArray(value.incomeRules) || value.incomeRules.length > 1000 || new Set(value.incomeRules.map(r => r?.id)).size !== value.incomeRules.length || !value.incomeRules.every(r => isObject(r) && textValue(r.id) && textValue(r.title) && textValue(r.category) && boundedNumber(r.amount, 0.01, 1e9) && (r.day === null || (Number.isInteger(r.day) && boundedNumber(r.day, 1, 31)))))) return false;
+  if (value.universityEvents !== undefined && (!Array.isArray(value.universityEvents) || value.universityEvents.length > 10000 || new Set(value.universityEvents.map(e => e?.id)).size !== value.universityEvents.length || !value.universityEvents.every(e => isObject(e) && textValue(e.id) && textValue(e.title) && validDate(e.date) && optionalTime(e.time) && (e.endDate === undefined || validDate(e.endDate)) && optionalTime(e.endTime) && ['lecture','assignment','exam','event'].includes(e.kind as string) && textValue(e.description) && (e.url === undefined || (typeof e.url === 'string' && validUniversityUrl(e.url)))))) return false;
   return courses.every(c => textValue(c.name) && typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color)) &&
     (value.lectures as Record<string, unknown>[]).every(l => courseIds.has(l.courseId) && Number.isInteger(l.day) && boundedNumber(l.day, 0, 6) && optionalTime(l.start) && optionalTime(l.end) && (!l.end || (!!l.start && (l.end as string) > (l.start as string))) && textValue(l.location) && (l.attendanceUrl === undefined || (typeof l.attendanceUrl === 'string' && validUniversityUrl(l.attendanceUrl))) && (l.fileUrl === undefined || (typeof l.fileUrl === 'string' && validUniversityUrl(l.fileUrl))) && (l.timePending === undefined || textValue(l.timePending))) &&
     (value.tasks as Record<string, unknown>[]).every(t => textValue(t.title) && courseRef(t.courseId) && ['assignment', 'project', 'exam'].includes(t.kind as string) && validDate(t.due) && ['low', 'medium', 'high'].includes(t.priority as string) && boundedNumber(t.minutes, 0, 100000) && typeof t.completed === 'boolean' && optionalTime(t.time) && optionalTime(t.endTime) && (!t.endTime || (!!t.time && (t.endTime as string) > (t.time as string))) && (t.timePending === undefined || textValue(t.timePending))) &&

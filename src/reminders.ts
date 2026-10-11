@@ -12,7 +12,7 @@ export async function enableStudyReminders(settings: Settings): Promise<string> 
   await LocalNotifications.cancel({ notifications: ids });
   await LocalNotifications.schedule({ notifications: settings.studyDays.map(day => ({
     id: 6100 + day,
-    title: 'عزيز ليدر • وقت المذاكرة',
+    title: 'عز اللوجستيات • وقت المذاكرة',
     body: 'راجع خطة اليوم وابدأ أول جلسة مذاكرة.',
     schedule: { on: { weekday: day + 1, hour, minute }, repeats: true },
   })) });

@@ -145,7 +145,7 @@ const server = http.createServer(async (req, res) => {
   const file = resolve(staticRoot, '.' + decodeURIComponent(path === '/' ? '/index.html' : path));
   if (!file.startsWith(staticRoot + '/')) return json(res, 404, { error: 'غير موجود.' });
   let content; try { if (!statSync(file).isFile()) throw new Error(); content = readFileSync(file); } catch { return json(res, 404, { error: 'الملف غير موجود.' }); }
-  const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.pdf':'application/pdf' };
+  const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.svg':'image/svg+xml', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.pdf':'application/pdf' };
   if (!path.startsWith('/personal-lessons/')) res.setHeader('Cache-Control', path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
   res.setHeader('Content-Type', types[extname(file)] || 'application/octet-stream'); res.writeHead(200); res.end(req.method === 'HEAD' ? undefined : content);
  } catch (error) { json(res, 400, { error: error.message === 'body-size' ? 'البيانات أكبر من الحد المسموح.' : 'تعذّر تنفيذ الطلب.' }); }

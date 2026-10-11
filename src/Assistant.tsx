@@ -46,7 +46,7 @@ export default function AssistantPage() {
     setAnswer(note ? `من ملاحظتك «${note.title}»:\n${note.summary || summarizeText(note.content)}\n\nهذا مقتطف من النص المحفوظ، راجعه مع الدرس الأصلي.` : 'أستطيع عرض مواعيدك والبحث في ملاحظاتك المحفوظة. أضف نص الدرس واسأل عنه. شرح الأسئلة المفتوحة والمحادثة الذكية يحتاجان ربط خدمة ذكاء اصطناعي؛ هذه الخدمة غير متصلة حالياً.');
   }
   return <div className="page-content">
-    <SectionHeader eyebrow="تحدّث بالعربية" title="مساعد عزيز ليدر" description="اسأل عن مهامك أو ابحث في ملاحظاتك المحفوظة." />
+    <SectionHeader eyebrow="تحدّث بالعربية" title="مساعد عز اللوجستيات" description="اسأل عن مهامك أو ابحث في ملاحظاتك المحفوظة." />
     <p className="notice">هذه نسخة أولية: الردود من بياناتك المحفوظة. خدمة الذكاء الاصطناعي ومنصة الجامعة غير متصلتين. قد يستخدم التعرف الصوتي خدمة آبل؛ يبدأ فقط عندما تضغط زر الميكروفون وتسمح له.</p>
     <form className="card stack" onSubmit={ask}>
       <label htmlFor="assistant-question">سؤالك</label><textarea id="assistant-question" rows={4} value={question} maxLength={4000} onChange={e => setQuestion(e.target.value)} placeholder="مثلاً: ما الواجبات القادمة؟" />
