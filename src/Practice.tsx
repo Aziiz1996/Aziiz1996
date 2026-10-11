@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SectionHeader } from './ui';
+import { LOGISTICS_QUESTIONS } from './logisticsContent';
 
 const defaultQuestions = [
   { question: 'ما المقصود بمدة التوريد؟', options: ['الوقت بين طلب البضاعة واستلامها', 'عدد وحدات المخزون', 'سعر بيع المنتج'], correct: 0, explanation: 'مدة التوريد هي الزمن من إصدار الطلب إلى استلامه، وتؤثر في توقيت إعادة الطلب.' },
@@ -8,8 +9,8 @@ const defaultQuestions = [
 ];
 
 export default function PracticePage() {
-  const [questions, setQuestions] = useState(defaultQuestions);
-  const [fromLessons, setFromLessons] = useState(false);
+  const [questions, setQuestions] = useState([...LOGISTICS_QUESTIONS]);
+  const [fromLessons, setFromLessons] = useState(true);
   useEffect(() => {
     const controller = new AbortController();
     fetch('./personal-lessons/index.json', { signal: controller.signal }).then(async response => {

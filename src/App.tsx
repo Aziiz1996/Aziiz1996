@@ -14,6 +14,7 @@ import NotesPage from './Notes';
 import FinancePage from './Finance';
 import SettingsPage from './Settings';
 import type { Page } from './types';
+import { LOGISTICS_TERMS } from './logisticsContent';
 
 const NAV = [
   { id: 'university', label: 'الجامعة — الكلية التطبيقية', icon: GraduationCap },
@@ -68,6 +69,12 @@ function Dashboard() {
       <div className="welcome-copy"><span className="hero-tag"><Sparkles size={14} /> مساحتك، على طريقتك</span><h1>أهلاً{data.settings.name ? `، ${data.settings.name}` : ' بك'} 👋<br />خطوة اليوم تصنع فرق الغد.</h1><p>دراستك ومواعيدك ومصروفاتك، في مكان يخفف الزحام ويترك لك وقتاً للتركيز.</p><button className="btn btn-primary" onClick={() => navigate(data.courses.length ? 'plan' : 'courses')}>{data.courses.length ? 'شاهد خطة المذاكرة' : 'ابدأ بإضافة موادك'}<ArrowLeft size={18} /></button></div>
       <div className="welcome-art" aria-hidden="true"><span className="orbit" /><span className="art-book" /><span className="art-book-two" /><span className="art-star">✦</span></div>
     </section>
+    <section className="logistics-showcase" aria-label="مجالات سلاسل الإمداد">
+      <button className="logistics-scene warehouse" onClick={() => navigate('courses')}><span>إدارة المستودعات</span><strong>من الاستلام إلى الصرف</strong></button>
+      <button className="logistics-scene network" onClick={() => navigate('opportunities')}><span>النقل والتوزيع</span><strong>شبكة تصل المورد بالعميل</strong></button>
+      <button className="logistics-scene planning" onClick={() => navigate('plan')}><span>التخطيط والتحليل</span><strong>قرار أفضل من بيانات أوضح</strong></button>
+    </section>
+    <section className="card logistics-dictionary"><div className="card-heading"><div><span className="eyebrow">لغة التخصص</span><h2>مفردات لوجستية مهمة</h2></div></div><div className="term-grid">{LOGISTICS_TERMS.map(([english, arabic, meaning]) => <article className="term-card" key={english}><span dir="ltr">{english}</span><strong>{arabic}</strong><p>{meaning}</p></article>)}</div></section>
     <div className="stat-grid dashboard-stats">
       <article className="stat-card"><span className="stat-icon"><ClipboardList size={22} /></span><span className="stat-label">مهام تنتظر خطوتك</span><strong className="stat-value">{number(active.length)}</strong><span className="muted">واجبات ومشروعات واختبارات</span></article>
       <article className="stat-card"><span className="stat-icon teal"><Clock3 size={22} /></span><span className="stat-label">خطة اليوم</span><strong className="stat-value">{number(sessions.reduce((sum, s) => sum + s.minutes, 0))}<small> دقيقة</small></strong><span className="muted">{number(sessions.length)} جلسات موزعة</span></article>

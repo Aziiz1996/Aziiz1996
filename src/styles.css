@@ -118,6 +118,21 @@ input::placeholder, textarea::placeholder { color: #aaa5b8; }
 .empty-state .btn { margin-top: 16px; }
 
 .welcome-card { position: relative; min-height: 215px; overflow: hidden; border: 1px solid #e8e1f7; border-radius: 20px; padding: 30px; display: flex; justify-content: space-between; gap: 20px; background: linear-gradient(115deg, #f1ebff 0%, #f5f0fe 47%, #f5f1fd 100%); margin-bottom: 24px; }
+.logistics-showcase { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.logistics-scene { position: relative; min-height: 190px; overflow: hidden; border: 0; border-radius: 22px; padding: 22px; color: #fff; text-align: right; cursor: pointer; background-size: cover; background-position: center; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; box-shadow: 0 18px 40px rgba(36, 24, 82, .18); isolation: isolate; }
+.logistics-scene::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(9, 12, 42, .06), rgba(9, 12, 42, .88)); transition: opacity .2s ease; }
+.logistics-scene:hover::before { opacity: .85; }
+.logistics-scene.warehouse { background-image: url('/logistics-warehouse.svg'); }
+.logistics-scene.network { background-image: url('/logistics-network.svg'); }
+.logistics-scene.planning { background-image: url('/logistics-planning.svg'); }
+.logistics-scene span { font-size: 11px; color: #d9f8ff; margin-bottom: 7px; }
+.logistics-scene strong { font-size: 17px; line-height: 1.6; }
+.logistics-dictionary { margin-bottom: 18px; overflow: hidden; }
+.term-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.term-card { background: linear-gradient(145deg, #faf8ff, #f1f8fb); border: 1px solid #ebe5f7; border-radius: 15px; padding: 14px; }
+.term-card > span { display: block; color: #6b4fe0; font-size: 10px; font-weight: 800; letter-spacing: .03em; }
+.term-card strong { display: block; margin: 5px 0; font-size: 12px; }
+.term-card p { color: #756d82; font-size: 10px; line-height: 1.8; }
 .welcome-copy { position: relative; z-index: 2; max-width: 65%; }
 .hero-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 9px; color: #9377c4; padding: 5px 9px; background: #fff9; border-radius: 6px; margin-bottom: 14px; }
 .hero-tag svg { width: 12px; height: 12px; }
@@ -676,6 +691,9 @@ input::placeholder, textarea::placeholder { color: #aaa5b8; }
   .mini-stat div > span { font-size: 9px; }
 }
 @media (max-width: 760px) {
+  .logistics-showcase { grid-template-columns: 1fr; }
+  .logistics-scene { min-height: 155px; }
+  .term-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .app-shell { display: flex; flex-direction: column; }
   .sidebar { position: relative; width: 100%; height: auto; padding: 17px 20px 13px; }
   .brand { margin: 0 0 17px; gap: 9px; }

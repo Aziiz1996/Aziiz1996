@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
 import { emptyData, validateData } from '../src/validation.ts';
+import { LOGISTICS_LESSONS } from '../src/logisticsContent.ts';
 
 const scrypt = promisify(scryptCallback);
 const dataDir = resolve(process.env.LEADER_DATA_DIR || '.leader-data');
@@ -22,12 +23,27 @@ function current(req) {
  if (!token) return null;
  return db.prepare('SELECT users.* FROM sessions JOIN users ON sessions.user_id=users.id WHERE sessions.hash=? AND sessions.expires>?').get(hash(token), Date.now()) || null;
 }
+function withOwnerContent(user) {
+ if (!user?.owner) return user;
+ const data = JSON.parse(user.data);
+ const before = JSON.stringify(data);
+ const courseId = 'inventory-management';
+ if (!data.courses.some(course => course.id === courseId)) data.courses.push({ id: courseId, name: 'إدارة المخزون والمخازن', color: '#7c3aed' });
+ LOGISTICS_LESSONS.forEach((lesson, index) => {
+  if (!data.lectures.some(lecture => lecture.id === lesson.id)) data.lectures.push({ id: lesson.id, courseId, day: index, start: '', end: '', location: lesson.title, timePending: 'حددي الموعد ورابط الحضور من منصة مودل' });
+  if (!data.notes.some(note => note.id === lesson.id)) data.notes.push({ id: lesson.id, courseId, title: lesson.title, content: lesson.summary, summary: lesson.summary, updatedAt: new Date().toISOString() });
+ });
+ const serialized = JSON.stringify(data);
+ if (serialized !== before) db.prepare('UPDATE users SET data=? WHERE id=?').run(serialized, user.id);
+ return { ...user, data: serialized };
+}
 async function body(req) {
  let count = 0; const chunks = [];
  for await (const chunk of req) { count += chunk.length; if (count > 4 * 1024 * 1024) throw new Error('body-size'); chunks.push(chunk); }
  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 function session(res, user) {
+ user = withOwnerContent(user);
  db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
  const token = randomBytes(32).toString('hex');
  db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token), user.id, expiry());
@@ -83,7 +99,10 @@ const server = http.createServer(async (req, res) => {
    }
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
-   if (path === '/api/auth/session' && req.method === 'GET') return json(res, 200, { user: { id: user.id, username: user.username, owner: !!user.owner }, data: JSON.parse(user.data) });
+   if (path === '/api/auth/session' && req.method === 'GET') {
+    const hydrated = withOwnerContent(user);
+    return json(res, 200, { user: { id: hydrated.id, username: hydrated.username, owner: !!hydrated.owner }, data: JSON.parse(hydrated.data) });
+   }
    if (path === '/api/auth/logout' && req.method === 'POST') {
     const token = /leader_session=([a-f0-9]{64})/.exec(req.headers.cookie || '')?.[1];
     if (token) db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token));
@@ -105,12 +124,7 @@ const server = http.createServer(async (req, res) => {
    if (path === '/api/auth/claim-owner' && req.method === 'POST') {
     const existingOwner = db.prepare('SELECT id FROM users WHERE owner=1').get();
     if (existingOwner && existingOwner.id !== user.id) return json(res, 409, { error: 'تم تفعيل حساب رئيسة التشغيل مسبقاً.' });
-    const data = JSON.parse(user.data);
-    const courseId = 'inventory-management';
-    if (!data.courses.some(course => course.id === courseId)) data.courses.push({ id: courseId, name: 'إدارة المخزون والمخازن', color: '#7c3aed' });
-    if (!data.lectures.some(lecture => lecture.id === 'inventory-lecture-1')) data.lectures.push({ id: 'inventory-lecture-1', courseId, day: 0, start: '', end: '', location: 'عن بُعد', timePending: 'حددي الموعد من منصة مودل' });
-    if (!data.notes.some(note => note.id === 'inventory-summary-1')) data.notes.push({ id: 'inventory-summary-1', courseId, title: 'المحاضرة الأولى — مقدمة في إدارة المخزون والمخازن', content: 'تشرح المحاضرة مفهوم المخزون والمخازن، وأسباب الاحتفاظ بالمخزون، ومهام إدارة المخزون، والفرق بين إدارة المخزون وإدارة المخازن، وأهمية تحقيق التوازن بين تلبية الطلب وتقليل التكلفة.', summary: 'إدارة المخزون تنظّم الكميات المطلوبة ومواعيد توفيرها وتتابعها حتى الاستخدام أو البيع. إدارة المخازن تهتم بالاستلام والحفظ والحماية والصرف. الهدف هو منع النقص والفائض، خفض التكلفة، وضمان استمرار التوريد.', updatedAt: new Date().toISOString() });
-    db.prepare('UPDATE users SET owner=1, data=? WHERE id=?').run(JSON.stringify(data), user.id);
+    db.prepare('UPDATE users SET owner=1 WHERE id=?').run(user.id);
     return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
    }
    if (path === '/api/data' && req.method === 'PUT') {

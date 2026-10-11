@@ -70,8 +70,9 @@ test('an authenticated account can claim the unassigned owner role once and rece
   const claimed = await claim.json();
   assert.equal(claim.status, 200); assert.equal(claimed.user.owner, true);
   assert.equal(claimed.data.courses[0].name, 'إدارة المخزون والمخازن');
-  assert.equal(claimed.data.lectures[0].id, 'inventory-lecture-1');
-  assert.equal(claimed.data.notes[0].id, 'inventory-summary-1');
+  assert.equal(claimed.data.lectures.length, 5);
+  assert.equal(claimed.data.notes.length, 5);
+  assert.equal(claimed.data.notes[0].id, 'inventory-lecture-1');
  } finally { processHandle.kill(); await once(processHandle, 'exit'); rmSync(directory,{ recursive:true, force:true }); }
 });
 
