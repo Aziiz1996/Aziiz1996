@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>ar</string>
 	<key>CFBundleDisplayName</key>
-	<string>عزيز ليدر</string>
+	<string>عز اللوجستيات</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -25,9 +25,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>يستخدم Leader الميكروفون عند طلبك لإدخال سؤالك صوتياً.</string>
+	<string>يستخدم عز اللوجستيات الميكروفون عند طلبك لإدخال سؤالك صوتياً.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>يضيف عز اللوجستيات مواعيد المحاضرات والواجبات والاختبارات إلى تقويمك بعد موافقتك.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>يحتاج عز اللوجستيات إذن الكتابة لإضافة مواعيد الدراسة والتنبيهات إلى تقويمك.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>يحوّل Leader كلامك العربي إلى نص لإرسال السؤال بعد مراجعته.</string>
+	<string>يحوّل عز اللوجستيات كلامك العربي إلى نص لإرسال السؤال بعد مراجعته.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

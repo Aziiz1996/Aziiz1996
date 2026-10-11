@@ -14,7 +14,7 @@ test('Moodle courses and upcoming events are normalized for the study dashboard'
     ] },
   );
   assert.equal(result.siteName, 'الكلية التطبيقية');
-  assert.deepEqual(result.courses[0], { id:'moodle-course-7', moodleId:7, name:'إدارة المخزون', color:'#0B1B3D' });
+  assert.deepEqual(result.courses[0], { id:'moodle-course-7', moodleId:7, name:'إدارة المخزون', code:'INV', color:'#0B1B3D' });
   assert.equal(result.events[0].kind, 'exam');
   assert.equal(result.events[1].kind, 'assignment');
   assert.equal(result.events[2].kind, 'lecture');

@@ -34,7 +34,7 @@ const safeUrl = value => { try { const url = new URL(String(value || '')); retur
 const riyadhParts = timestamp => Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Riyadh', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23' }).formatToParts(new Date(timestamp * 1000)).map(part => [part.type, part.value]));
 
 export function normalizeMoodleData(site, courses, upcoming) {
-  const normalizedCourses = (Array.isArray(courses) ? courses : []).map(course => ({ id:`moodle-course-${course.id}`, moodleId:Number(course.id), name:clean(course.fullname || course.displayname || course.shortname || 'مادة مودل'), color:'#0B1B3D' })).filter(course => Number.isFinite(course.moodleId));
+  const normalizedCourses = (Array.isArray(courses) ? courses : []).map(course => ({ id:`moodle-course-${course.id}`, moodleId:Number(course.id), name:clean(course.fullname || course.displayname || course.shortname || 'مادة مودل'), code:clean(course.shortname || course.idnumber || '') || undefined, color:'#0B1B3D' })).filter(course => Number.isFinite(course.moodleId));
   const events = (Array.isArray(upcoming?.events) ? upcoming.events : Array.isArray(upcoming) ? upcoming : []).flatMap(event => {
     const stamp = Number(event.timestart || event.timesort || event.timecreated);
     if (!Number.isFinite(stamp) || stamp <= 0) return [];

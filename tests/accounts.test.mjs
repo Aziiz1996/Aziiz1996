@@ -10,7 +10,7 @@ import { emptyData } from '../src/validation.ts';
 test('account isolation, signout, owner files, origin checks, and password hashing', async () => {
  const directory = mkdtempSync(join(tmpdir(), 'leader-account-test-'));
  const port = 31479; const base = 'http://127.0.0.1:' + port;
- const processHandle = spawn(process.execPath, ['--experimental-strip-types', 'server/index.mjs'], { env: { ...process.env, PORT: String(port), LEADER_DATA_DIR: directory, LEADER_OWNER_SETUP_KEY: 'synthetic-owner-setup-key', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'] });
+ const processHandle = spawn(process.execPath, ['--experimental-strip-types', 'server/index.mjs'], { env: { ...process.env, OPENAI_API_KEY:'', PORT: String(port), LEADER_DATA_DIR: directory, LEADER_OWNER_SETUP_KEY: 'synthetic-owner-setup-key', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'] });
  try {
   await Promise.race([once(processHandle.stdout, 'data'), once(processHandle, 'exit').then(() => { throw new Error('Server failed'); }), new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Startup timeout')), 10000); timer.unref(); })]);
   async function request(path, { method='GET', cookie='', value, origin=base, account } = {}) {
@@ -34,6 +34,7 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   assert.equal(save.response.status,200);
   const other = await request('/api/auth/session', { cookie:member.cookie });
   assert.notEqual(other.json.data.settings.name, 'Private owner data');
+  assert.equal((await request('/api/ai/course-summary', { method:'POST', cookie:owner.cookie, value:{ courseId:'inventory-management' } })).response.status,503);
   assert.equal((await request('/api/data', { method:'PUT', cookie:member.cookie, account:owner.json.user.id, value:data })).response.status,403);
   assert.equal((await request('/api/data', { method:'PUT', cookie:owner.cookie, account:owner.json.user.id, origin:'https://other.example', value:data })).response.status,403);
   assert.equal((await request('/api/data', { method:'PUT', cookie:owner.cookie, account:owner.json.user.id, value:{ version:1 } })).response.status,400);

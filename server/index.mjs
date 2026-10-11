@@ -7,6 +7,7 @@ import { resolve, extname } from 'node:path';
 import { emptyData, validateData } from '../src/validation.ts';
 import { LOGISTICS_LESSONS } from '../src/logisticsContent.ts';
 import { connectMoodle, syncMoodle } from './moodle.mjs';
+import { generateAcademicSummary } from './openai.mjs';
 
 const scrypt = promisify(scryptCallback);
 const dataDir = resolve(process.env.LEADER_DATA_DIR || '.leader-data');
@@ -17,6 +18,7 @@ const staticRoot = resolve('dist');
 const attempts = new Map();
 const moodleConnections = new Map();
 const moodleAttempts = new Map();
+const summaryAttempts = new Map();
 const hash = value => createHash('sha256').update(value).digest('hex');
 const expiry = () => Date.now() + 7 * 24 * 60 * 60 * 1000;
 const cookie = value => 'leader_session=' + value + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=' + (value ? 604800 : 0) + (process.env.NODE_ENV === 'production' ? '; Secure' : '');
@@ -44,8 +46,8 @@ function mergeMoodleData(user, result) {
  const data = JSON.parse(user.data);
  for (const course of result.courses) {
   const existing = data.courses.find(item => item.id === course.id);
-  if (existing) existing.name = course.name;
-  else data.courses.push({ id:course.id, name:course.name, color:course.color });
+  if (existing) { existing.name = course.name; if (course.code) existing.code = course.code; }
+  else data.courses.push({ id:course.id, name:course.name, code:course.code, color:course.color });
  }
  const events = new Map((data.universityEvents ?? []).map(event => [event.id, event]));
  result.events.forEach(event => events.set(event.id, event));
@@ -179,6 +181,28 @@ const server = http.createServer(async (req, res) => {
      const result = await syncMoodle(token); const updated = mergeMoodleData(user, result);
      return json(res, 200, accountJson(updated, { connected:true, moodle:{ siteName:result.siteName, fullName:result.fullName, courseCount:result.courses.length, eventCount:result.events.length } }));
     } catch { moodleConnections.delete(user.id); return json(res, 502, { error:'تعذّرت مزامنة مودل. أعد الربط وحاول مرة أخرى.' }); }
+   }
+   if (path === '/api/ai/course-summary' && req.method === 'POST') {
+    if (!process.env.OPENAI_API_KEY) return json(res, 503, { error:'خدمة التلخيص الذكي غير مفعّلة بعد. أضف OPENAI_API_KEY في إعدادات Render.' });
+    const now = Date.now(); const record = summaryAttempts.get(user.id);
+    const attempt = !record || record.until < now ? { count:0, until:now + 24 * 60 * 60 * 1000 } : record;
+    summaryAttempts.set(user.id, attempt);
+    if (++attempt.count > 10) return json(res, 429, { error:'وصلت إلى حد ١٠ ملخصات ذكية اليوم. حاول غداً.' });
+    const payload = await body(req); const courseId = String(payload.courseId || '');
+    const data = JSON.parse(user.data); const course = data.courses.find(item => item.id === courseId);
+    if (!course) return json(res, 404, { error:'المادة غير موجودة في حسابك.' });
+    const syllabus = String(payload.syllabus || '').trim();
+    if (syllabus.length > 30000) return json(res, 400, { error:'وصف المادة أطول من الحد المسموح.' });
+    try {
+     const generated = await generateAcademicSummary({ name:course.name, code:course.code || '', syllabus });
+     const id = `ai-summary-${course.id}`.slice(0, 145);
+     const note = { id, title:`ملخص ذكي — ${course.name}`, courseId:course.id, content:syllabus || generated.markdown, summary:generated.markdown, updatedAt:new Date().toISOString() };
+     const index = data.notes.findIndex(item => item.id === id);
+     if (index >= 0) data.notes[index] = note; else data.notes.push(note);
+     if (!validateData(data)) throw new Error('invalid-summary');
+     const serialized = JSON.stringify(data); db.prepare('UPDATE users SET data=? WHERE id=?').run(serialized, user.id);
+     return json(res, 200, accountJson({ ...user, data:serialized }, { summary:{ title:generated.title, concepts:generated.concepts } }));
+    } catch { return json(res, 502, { error:'تعذّر إنشاء الملخص حالياً. تحقق من مفتاح OpenAI وحاول مجدداً.' }); }
    }
    if (path === '/api/data' && req.method === 'PUT') {
     if (req.headers['x-leader-account'] !== user.id) return json(res, 403, { error: 'تغيّر الحساب. أعد تسجيل الدخول قبل الحفظ.' });

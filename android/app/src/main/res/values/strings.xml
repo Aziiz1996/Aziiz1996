@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">عز اللوجستيات</string>
+    <string name="title_activity_main">عز اللوجستيات</string>
+    <string name="package_name">com.leader.study</string>
+    <string name="custom_url_scheme">com.leader.study</string>
+</resources>

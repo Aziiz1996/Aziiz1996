@@ -14,6 +14,7 @@ def capacitor_pods
   pod 'CapacitorCommunitySpeechRecognition', :path => '../../node_modules/@capacitor-community/speech-recognition'
   pod 'CapacitorCommunityTextToSpeech', :path => '../../node_modules/@capacitor-community/text-to-speech'
   pod 'CapacitorLocalNotifications', :path => '../../node_modules/@capacitor/local-notifications'
+  pod 'EbarooniCapacitorCalendar', :path => '../../node_modules/@ebarooni/capacitor-calendar'
 end
 
 target 'App' do
