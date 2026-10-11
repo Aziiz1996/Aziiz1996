@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
 import { emptyData, validateData } from '../src/validation.ts';
 import { LOGISTICS_LESSONS } from '../src/logisticsContent.ts';
+import { connectMoodle, syncMoodle } from './moodle.mjs';
 
 const scrypt = promisify(scryptCallback);
 const dataDir = resolve(process.env.LEADER_DATA_DIR || '.leader-data');
@@ -14,6 +15,8 @@ const db = new DatabaseSync(resolve(dataDir, 'leader.sqlite'));
 db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, owner INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL);');
 const staticRoot = resolve('dist');
 const attempts = new Map();
+const moodleConnections = new Map();
+const moodleAttempts = new Map();
 const hash = value => createHash('sha256').update(value).digest('hex');
 const expiry = () => Date.now() + 7 * 24 * 60 * 60 * 1000;
 const cookie = value => 'leader_session=' + value + '; HttpOnly; SameSite=Lax; Path=/; Max-Age=' + (value ? 604800 : 0) + (process.env.NODE_ENV === 'production' ? '; Secure' : '');
@@ -37,6 +40,28 @@ function withOwnerContent(user) {
  if (serialized !== before) db.prepare('UPDATE users SET data=? WHERE id=?').run(serialized, user.id);
  return { ...user, data: serialized };
 }
+function mergeMoodleData(user, result) {
+ const data = JSON.parse(user.data);
+ for (const course of result.courses) {
+  const existing = data.courses.find(item => item.id === course.id);
+  if (existing) existing.name = course.name;
+  else data.courses.push({ id:course.id, name:course.name, color:course.color });
+ }
+ const events = new Map((data.universityEvents ?? []).map(event => [event.id, event]));
+ result.events.forEach(event => events.set(event.id, event));
+ data.universityEvents = [...events.values()];
+ for (const event of result.events.filter(item => item.kind === 'exam' || item.kind === 'assignment')) {
+  const id = `${event.id}-task`; const kind = event.kind === 'exam' ? 'exam' : 'assignment';
+  const task = data.tasks.find(item => item.id === id);
+  const courseId = event.courseId && data.courses.some(course => course.id === event.courseId) ? event.courseId : '';
+  const value = { id, title:event.title, courseId, kind, due:event.date, priority:kind === 'exam' ? 'high' : 'medium', minutes:kind === 'exam' ? 180 : 90, completed:task?.completed || false, time:event.time || undefined, endTime:event.endTime || undefined, timePending:event.time ? undefined : 'الوقت غير محدد في مودل' };
+  if (task) Object.assign(task, value); else data.tasks.push(value);
+ }
+ const serialized = JSON.stringify(data);
+ db.prepare('UPDATE users SET data=? WHERE id=?').run(serialized, user.id);
+ return { ...user, data:serialized };
+}
+function accountJson(user, extra = {}) { return { ...extra, user:{ id:user.id, username:user.username, owner:!!user.owner }, data:JSON.parse(user.data) }; }
 async function body(req) {
  let count = 0; const chunks = [];
  for await (const chunk of req) { count += chunk.length; if (count > 4 * 1024 * 1024) throw new Error('body-size'); chunks.push(chunk); }
@@ -106,6 +131,7 @@ const server = http.createServer(async (req, res) => {
    if (path === '/api/auth/logout' && req.method === 'POST') {
     const token = /leader_session=([a-f0-9]{64})/.exec(req.headers.cookie || '')?.[1];
     if (token) db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token));
+    moodleConnections.delete(user.id);
     res.setHeader('Set-Cookie', cookie('')); return json(res, 200, { ok: true });
    }
    if (path === '/api/auth/password' && req.method === 'POST') {
@@ -126,6 +152,33 @@ const server = http.createServer(async (req, res) => {
     if (existingOwner && existingOwner.id !== user.id) return json(res, 409, { error: 'تم تفعيل حساب رئيسة التشغيل مسبقاً.' });
     db.prepare('UPDATE users SET owner=1 WHERE id=?').run(user.id);
     return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
+   }
+   if (path === '/api/moodle/status' && req.method === 'GET') return json(res, 200, { connected:moodleConnections.has(user.id) });
+   if (path === '/api/moodle/disconnect' && req.method === 'POST') {
+    moodleConnections.delete(user.id); return json(res, 200, { connected:false });
+   }
+   if (path === '/api/moodle/connect' && req.method === 'POST') {
+    const now = Date.now(); const record = moodleAttempts.get(user.id);
+    const attempt = !record || record.until < now ? { count:0, until:now + 15 * 60 * 1000 } : record;
+    moodleAttempts.set(user.id, attempt);
+    if (++attempt.count > 5) return json(res, 429, { error:'محاولات كثيرة. انتظر ١٥ دقيقة ثم حاول مجدداً.' });
+    const payload = await body(req); const username = String(payload.username || '').trim(); const password = payload.password;
+    if (!username || username.length > 254 || typeof password !== 'string' || !password || password.length > 256) return json(res, 400, { error:'أدخل اسم مستخدم مودل وكلمة المرور.' });
+    try {
+     const token = await connectMoodle(username, password);
+     const result = await syncMoodle(token);
+     moodleConnections.set(user.id, token); moodleAttempts.delete(user.id);
+     const updated = mergeMoodleData(user, result);
+     return json(res, 200, accountJson(updated, { connected:true, moodle:{ siteName:result.siteName, fullName:result.fullName, courseCount:result.courses.length, eventCount:result.events.length } }));
+    } catch { return json(res, 502, { error:'تعذّر ربط مودل. تحقق من البيانات، أو قد تكون خدمة تطبيقات مودل غير مفعّلة لدى الجامعة.' }); }
+   }
+   if (path === '/api/moodle/sync' && req.method === 'POST') {
+    const token = moodleConnections.get(user.id);
+    if (!token) return json(res, 409, { error:'أعد ربط مودل أولاً.' });
+    try {
+     const result = await syncMoodle(token); const updated = mergeMoodleData(user, result);
+     return json(res, 200, accountJson(updated, { connected:true, moodle:{ siteName:result.siteName, fullName:result.fullName, courseCount:result.courses.length, eventCount:result.events.length } }));
+    } catch { moodleConnections.delete(user.id); return json(res, 502, { error:'تعذّرت مزامنة مودل. أعد الربط وحاول مرة أخرى.' }); }
    }
    if (path === '/api/data' && req.method === 'PUT') {
     if (req.headers['x-leader-account'] !== user.id) return json(res, 403, { error: 'تغيّر الحساب. أعد تسجيل الدخول قبل الحفظ.' });

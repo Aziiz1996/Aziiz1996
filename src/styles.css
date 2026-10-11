@@ -918,3 +918,128 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
 .auth-card { width: min(100%, 440px); }
 .auth-card input { width: 100%; min-height: 44px; padding: 10px; border: 1px solid #ddd5ef; border-radius: 12px; }
 .account-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; background: #f3eefc; flex-wrap: wrap; }
+
+/* عز اللوجستيات: هوية نور المبسطة بروح سلاسل الإمداد الحديثة. */
+:root {
+  color: #1E293B;
+  background: #F8FAFC;
+  --primary: #0B1B3D;
+  --primary-dark: #06112A;
+  --primary-light: #E8EEF6;
+  --accent: #FF6B00;
+  --accent-dark: #D95800;
+  --text: #1E293B;
+  --muted: #64748B;
+  --border: #E2E8F0;
+  --success: #16856B;
+  --danger: #C2414B;
+  --radius: 16px;
+}
+body { background: #F8FAFC; color: var(--text); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline-color: #FF9A52; }
+::selection { background: #FFD6B8; color: #0B1B3D; }
+
+.account-bar {
+  position: fixed;
+  top: env(safe-area-inset-top);
+  right: 0;
+  left: 0;
+  z-index: 120;
+  min-height: 64px;
+  padding: 10px 24px;
+  flex-wrap: nowrap;
+  color: #fff;
+  background: #0B1B3D;
+  border-bottom: 1px solid #ffffff1f;
+  box-shadow: 0 8px 24px rgba(6, 17, 42, .18);
+}
+.account-bar .btn { min-height: 40px; }
+.account-bar .btn-home { color: #fff; background: #FF6B00; border-color: #FF6B00; font-weight: 800; }
+.account-bar .btn-home:hover { background: #D95800; border-color: #D95800; }
+.account-bar .account-identity { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.account-bar details { position: relative; }
+.account-bar details > summary { list-style: none; color: #fff; background: #ffffff12; border-color: #ffffff35; }
+.account-bar details > summary::-webkit-details-marker { display: none; }
+.account-bar details > form { position: absolute; top: calc(100% + 12px); left: 0; width: min(360px, calc(100vw - 32px)); padding: 20px; color: var(--text); background: #fff; border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 20px 50px rgba(6, 17, 42, .22); }
+.account-bar details input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.account-bar .btn-logout { color: #fff; background: transparent; border-color: #ffffff38; }
+.account-bar .btn-logout:hover { background: #ffffff12; }
+.account-bar > [role=alert] { color: #FFD6B8; font-size: 11px; }
+
+.app-shell { padding-top: 64px; background: #F8FAFC; }
+.sidebar { top: calc(64px + env(safe-area-inset-top)); height: calc(100vh - 64px - env(safe-area-inset-top)); background: #0B1B3D; color: #E7EDF8; }
+.brand-icon { background: #FF6B00; box-shadow: 0 10px 28px rgba(255, 107, 0, .24); }
+.brand-caption, .sidebar-label, .sidebar-profile > div > span { color: #9FB0CB; }
+.nav-item { color: #C4CEE0; }
+.nav-item:hover { background: #ffffff0d; color: #fff; }
+.nav-item.active, .nav-item[aria-current=page] { background: #FF6B00; color: #fff; box-shadow: 0 8px 24px rgba(255, 107, 0, .2); }
+.sidebar-tip, .sidebar-quote { color: #B9C5D8; background: #ffffff08; border-color: #ffffff12; }
+.sidebar-tip svg, .sidebar-quote svg { color: #FF8A38; }
+.sidebar-tip strong, .sidebar-quote strong, .sidebar-profile strong { color: #fff; }
+.sidebar-profile .avatar { background: #FF6B00; color: #fff; }
+
+.topbar { position: sticky; top: calc(64px + env(safe-area-inset-top)); z-index: 30; background: rgba(248, 250, 252, .94); border-color: #E2E8F0; backdrop-filter: blur(14px); }
+.topbar-title, .topbar-title strong { color: #0B1B3D; }
+.topbar-title > svg, .card-title svg, .eyebrow { color: #FF6B00; }
+.page-header h1, .card h2, .card h3 { color: #0B1B3D; }
+.btn-primary { background: #FF6B00; color: #fff; box-shadow: 0 7px 18px rgba(255, 107, 0, .17); }
+.btn-primary:hover { background: #D95800; box-shadow: 0 9px 22px rgba(255, 107, 0, .23); }
+.btn-secondary { color: #0B1B3D; background: #fff; border-color: #CBD5E1; }
+.btn-secondary:hover { background: #F1F5F9; }
+.btn-ghost { color: #0B1B3D; background: #E8EEF6; }
+.section-link { color: #D95800; }
+.section-link:hover { color: #A94100; }
+.icon-button:hover { color: #FF6B00; background: #FFF1E8; }
+
+.card, .course-card, .note-card, .task-item, .session, .stat-card { border-color: #E2E8F0; background: #fff; box-shadow: 0 8px 26px rgba(11, 27, 61, .045); }
+.card { position: relative; overflow: clip; }
+.card::after { content: ''; position: absolute; top: 0; right: 0; width: 4px; height: 100%; background: linear-gradient(#0B1B3D, #FF6B00); opacity: .72; }
+.card:hover { box-shadow: 0 14px 34px rgba(11, 27, 61, .075); }
+.chip, .badge { color: #0B1B3D; background: #E8EEF6; }
+.chip.orange, .badge.orange, .badge.warning { color: #B94D00; background: #FFF0E5; }
+.chip.green, .badge.green, .badge.success { color: #11705B; background: #E5F5EF; }
+.notice { color: #334155; background: #EEF3F8; border-color: #D7E0EA; }
+
+.welcome-card { border-color: #D9E2EE; background: linear-gradient(120deg, #EAF0F7 0%, #F8FAFC 52%, #FFF0E5 100%); }
+.welcome-copy h1 { color: #0B1B3D; }
+.welcome-copy h1 span, .term-card > span, .hero-tag { color: #D95800; }
+.welcome-copy p { color: #64748B; }
+.hero-tag { background: #fff; border: 1px solid #FFE0C9; }
+.welcome-art::before { border-color: #FFB27B; box-shadow: 0 0 0 22px #FF6B0012; }
+.art-book { background: linear-gradient(135deg, #173365, #0B1B3D); box-shadow: 11px 15px 20px #0B1B3D20, inset 7px 0 #ffffff28; }
+.art-book-two { background: #FF7C1E; box-shadow: -8px 10px 16px #FF6B0020, inset -6px 0 #D95800; }
+.term-card { background: linear-gradient(145deg, #fff, #F1F5F9); border-color: #E2E8F0; }
+.stat-icon { color: #0B1B3D; background: #E8EEF6; }
+.schedule-marker { background: #0B1B3D; }
+.schedule-marker.orange { background: #FF6B00; }
+.logistics-scene { box-shadow: 0 18px 40px rgba(11, 27, 61, .18); }
+.logistics-scene::before { background: linear-gradient(180deg, rgba(11, 27, 61, .04), rgba(11, 27, 61, .9)); }
+.moodle-connect-card { border-top: 3px solid #FF6B00; }
+
+.auth-screen { position: relative; overflow: hidden; color: #fff; background: #0B1B3D; isolation: isolate; }
+.auth-screen::before { content: ''; position: absolute; inset: -12%; z-index: -2; background: radial-gradient(circle at 15% 25%, #FF6B0026 0 2px, transparent 3px), radial-gradient(circle at 78% 72%, #4A74B830 0 3px, transparent 4px); background-size: 90px 90px, 130px 130px; transform: rotate(-8deg); }
+.auth-screen::after { content: ''; position: absolute; inset: 0; z-index: -1; opacity: .18; background: linear-gradient(115deg, transparent 15%, #7EA1D9 15.3%, transparent 15.6%), linear-gradient(35deg, transparent 72%, #FF6B00 72.2%, transparent 72.5%); }
+.auth-card { color: var(--text); background: rgba(255,255,255,.98); border-color: #ffffff5c; box-shadow: 0 28px 70px rgba(0,0,0,.28); }
+.auth-card::after { background: #FF6B00; opacity: 1; }
+.auth-card > img { border-radius: 22px; box-shadow: 0 12px 28px rgba(11, 27, 61, .18); }
+.auth-card h1 { color: #0B1B3D; }
+.auth-card input { border-color: #CBD5E1; background: #F8FAFC; }
+.auth-card button[aria-pressed=true] { color: #fff; background: #0B1B3D; border-color: #0B1B3D; }
+
+@media (max-width: 760px) {
+  .account-bar { min-height: 58px; padding: 8px 12px; gap: 7px; }
+  .account-bar .account-identity { max-width: 34vw; font-size: 0; }
+  .account-bar .account-identity svg { width: 20px; height: 20px; }
+  .account-bar details > summary { font-size: 0; width: 40px; padding: 8px; }
+  .account-bar details > summary::before { content: '•••'; font-size: 13px; }
+  .account-bar .btn-home, .account-bar .btn-logout { padding: 8px 10px; font-size: 10px; }
+  .app-shell { padding-top: 58px; }
+  .sidebar { top: auto; height: auto; }
+  .topbar { top: calc(58px + env(safe-area-inset-top)); }
+}
+@media (max-width: 480px) {
+  .account-bar .btn-logout { font-size: 0; width: 40px; padding: 8px; }
+  .account-bar .btn-logout svg { width: 19px; height: 19px; }
+  .account-bar > .btn-primary { font-size: 9px; padding: 8px; white-space: normal; }
+}
+@media print { .account-bar { display: none !important; } .app-shell { padding-top: 0; } }

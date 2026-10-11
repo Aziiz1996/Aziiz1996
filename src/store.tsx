@@ -30,6 +30,7 @@ export function AppProvider({ children, accountData, accountId }: { children: Re
   const [recoveryRaw, setRecoveryRaw] = useState(initial.recoveryRaw);
   const [page, setPage] = useState<Page>('dashboard');
   const [toast, setToast] = useState('');
+  useEffect(() => { const home = () => { setPage('dashboard'); window.scrollTo({ top:0, behavior:'smooth' }); }; window.addEventListener('az-logistics-home', home); return () => window.removeEventListener('az-logistics-home', home); }, []);
   const notify = useCallback((message: string) => setToast(message), []);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); }, [toast]);
   const persist = useCallback((next: AppData, allowRecovery = false) => {
