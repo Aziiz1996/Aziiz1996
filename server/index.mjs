@@ -52,7 +52,7 @@ const server = http.createServer(async (req, res) => {
     const attempt = !record || record.until < now ? { count: 0, until: now + 15 * 60 * 1000 } : record;
     attempts.set(ip, attempt); if (++attempt.count > 20) return json(res, 429, { error: 'محاولات كثيرة. انتظر قليلاً ثم حاول مجدداً.' });
     const payload = await body(req); const username = String(payload.username || '').trim().normalize('NFKC').toLowerCase(); const password = payload.password;
-    if (!/^[a-z0-9.!#$%&*+\/=?^_{}|~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(username) || username.length > 254 || typeof password !== 'string' || password.length < 10 || password.length > 128) return json(res, 400, { error: 'أدخل بريداً إلكترونياً صحيحاً وكلمة مرور من ١٠ إلى ١٢٨ حرفاً.' });
+    if (!/^[a-z0-9.!#$%&*+\/=?^_{}|~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(username) || username.length > 254 || typeof password !== 'string' || password.length < 3 || password.length > 128) return json(res, 400, { error: 'أدخل بريداً إلكترونياً صحيحاً وكلمة مرور من ٣ خانات على الأقل.' });
     let user = db.prepare('SELECT * FROM users WHERE username=?').get(username);
     if (path.endsWith('/register')) {
      if (user) return json(res, 409, { error: 'اسم المستخدم غير متاح.' });
@@ -88,6 +88,19 @@ const server = http.createServer(async (req, res) => {
     const token = /leader_session=([a-f0-9]{64})/.exec(req.headers.cookie || '')?.[1];
     if (token) db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token));
     res.setHeader('Set-Cookie', cookie('')); return json(res, 200, { ok: true });
+   }
+   if (path === '/api/auth/password' && req.method === 'POST') {
+    const payload = await body(req);
+    const currentPassword = payload.currentPassword;
+    const newPassword = payload.newPassword;
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || newPassword.length < 3 || newPassword.length > 128) return json(res, 400, { error: 'كلمة المرور الجديدة يجب أن تكون ٣ خانات على الأقل.' });
+    const actual = Buffer.from(await scrypt(currentPassword, user.salt, 64));
+    if (!timingSafeEqual(Buffer.from(user.password_hash, 'hex'), actual)) return json(res, 401, { error: 'كلمة المرور الحالية غير صحيحة.' });
+    const salt = randomBytes(16).toString('hex');
+    const passwordHash = Buffer.from(await scrypt(newPassword, salt, 64)).toString('hex');
+    db.prepare('UPDATE users SET salt=?, password_hash=? WHERE id=?').run(salt, passwordHash, user.id);
+    db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+    return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
    }
    if (path === '/api/data' && req.method === 'PUT') {
     if (req.headers['x-leader-account'] !== user.id) return json(res, 403, { error: 'تغيّر الحساب. أعد تسجيل الدخول قبل الحفظ.' });

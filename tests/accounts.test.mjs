@@ -44,6 +44,10 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   assert.equal((await request('/api/auth/session', { cookie:owner.cookie })).response.status,401);
   const login = await request('/api/auth/login', { method:'POST', value:{ username:'owner@example.com', password:'synthetic-password-one' } });
   assert.equal(login.json.data.settings.name, 'Private owner data');
+  const changed = await request('/api/auth/password', { method:'POST', cookie:login.cookie, value:{ currentPassword:'synthetic-password-one', newPassword:'123' } });
+  assert.equal(changed.response.status, 200); assert.equal(changed.json.user.owner, true);
+  assert.equal((await request('/api/auth/login', { method:'POST', value:{ username:'owner@example.com', password:'synthetic-password-one' } })).response.status,401);
+  assert.equal((await request('/api/auth/login', { method:'POST', value:{ username:'owner@example.com', password:'123' } })).response.status,200);
   const { DatabaseSync } = await import('node:sqlite');
   const database = new DatabaseSync(join(directory, 'leader.sqlite'));
   const stored = database.prepare('SELECT password_hash FROM users WHERE username=?').get('owner@example.com');
