@@ -28,6 +28,7 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   assert.match(owner.response.headers.get('set-cookie'), /HttpOnly/);
   const member = await request('/api/auth/register', { method:'POST', value:{ username:'member@example.com', password:'synthetic-password-two' } });
   assert.equal(member.response.status,200); assert.equal(member.json.user.owner,false);
+  assert.equal((await request('/api/auth/claim-owner', { method:'POST', cookie:member.cookie })).response.status,409);
   const data = emptyData(); data.settings.name = 'Private owner data';
   const save = await request('/api/data', { method:'PUT', cookie:owner.cookie, value:data, account:owner.json.user.id });
   assert.equal(save.response.status,200);
@@ -52,6 +53,25 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   const database = new DatabaseSync(join(directory, 'leader.sqlite'));
   const stored = database.prepare('SELECT password_hash FROM users WHERE username=?').get('owner@example.com');
   assert.notEqual(stored.password_hash, 'synthetic-password-one'); assert.equal(stored.password_hash.length,128); database.close();
+ } finally { processHandle.kill(); await once(processHandle, 'exit'); rmSync(directory,{ recursive:true, force:true }); }
+});
+
+test('an authenticated account can claim the unassigned owner role once and receives the starter lecture', async () => {
+ const directory = mkdtempSync(join(tmpdir(), 'leader-owner-claim-test-'));
+ const port = 31481; const base = 'http://127.0.0.1:' + port;
+ const processHandle = spawn(process.execPath, ['--experimental-strip-types', 'server/index.mjs'], { env: { ...process.env, PORT:String(port), LEADER_DATA_DIR:directory, LEADER_OWNER_SETUP_KEY:'unused-setup-key', NODE_ENV:'test' }, stdio:['ignore','pipe','pipe'] });
+ try {
+  await Promise.race([once(processHandle.stdout, 'data'), once(processHandle, 'exit').then(() => { throw new Error('Server failed'); }), new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Startup timeout')), 10000); timer.unref(); })]);
+  const registration = await fetch(base + '/api/auth/register', { method:'POST', headers:{ Origin:base, 'Content-Type':'application/json' }, body:JSON.stringify({ username:'operator@example.com', password:'123' }) });
+  const registered = await registration.json();
+  assert.equal(registered.user.owner, false);
+  const cookie = registration.headers.get('set-cookie').split(';')[0];
+  const claim = await fetch(base + '/api/auth/claim-owner', { method:'POST', headers:{ Origin:base, Cookie:cookie } });
+  const claimed = await claim.json();
+  assert.equal(claim.status, 200); assert.equal(claimed.user.owner, true);
+  assert.equal(claimed.data.courses[0].name, 'إدارة المخزون والمخازن');
+  assert.equal(claimed.data.lectures[0].id, 'inventory-lecture-1');
+  assert.equal(claimed.data.notes[0].id, 'inventory-summary-1');
  } finally { processHandle.kill(); await once(processHandle, 'exit'); rmSync(directory,{ recursive:true, force:true }); }
 });
 

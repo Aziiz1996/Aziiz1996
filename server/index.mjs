@@ -102,6 +102,17 @@ const server = http.createServer(async (req, res) => {
     db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
     return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
    }
+   if (path === '/api/auth/claim-owner' && req.method === 'POST') {
+    const existingOwner = db.prepare('SELECT id FROM users WHERE owner=1').get();
+    if (existingOwner && existingOwner.id !== user.id) return json(res, 409, { error: 'تم تفعيل حساب رئيسة التشغيل مسبقاً.' });
+    const data = JSON.parse(user.data);
+    const courseId = 'inventory-management';
+    if (!data.courses.some(course => course.id === courseId)) data.courses.push({ id: courseId, name: 'إدارة المخزون والمخازن', color: '#7c3aed' });
+    if (!data.lectures.some(lecture => lecture.id === 'inventory-lecture-1')) data.lectures.push({ id: 'inventory-lecture-1', courseId, day: 0, start: '', end: '', location: 'عن بُعد', timePending: 'حددي الموعد من منصة مودل' });
+    if (!data.notes.some(note => note.id === 'inventory-summary-1')) data.notes.push({ id: 'inventory-summary-1', courseId, title: 'المحاضرة الأولى — مقدمة في إدارة المخزون والمخازن', content: 'تشرح المحاضرة مفهوم المخزون والمخازن، وأسباب الاحتفاظ بالمخزون، ومهام إدارة المخزون، والفرق بين إدارة المخزون وإدارة المخازن، وأهمية تحقيق التوازن بين تلبية الطلب وتقليل التكلفة.', summary: 'إدارة المخزون تنظّم الكميات المطلوبة ومواعيد توفيرها وتتابعها حتى الاستخدام أو البيع. إدارة المخازن تهتم بالاستلام والحفظ والحماية والصرف. الهدف هو منع النقص والفائض، خفض التكلفة، وضمان استمرار التوريد.', updatedAt: new Date().toISOString() });
+    db.prepare('UPDATE users SET owner=1, data=? WHERE id=?').run(JSON.stringify(data), user.id);
+    return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
+   }
    if (path === '/api/data' && req.method === 'PUT') {
     if (req.headers['x-leader-account'] !== user.id) return json(res, 403, { error: 'تغيّر الحساب. أعد تسجيل الدخول قبل الحفظ.' });
     const value = await body(req);
