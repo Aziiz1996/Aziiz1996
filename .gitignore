@@ -16,3 +16,9 @@ ios/**/xcuserdata/
 public/personal-lessons/
 
 .leader-data/
+
+# Python backend caches and local credentials.
+__pycache__/
+*.py[cod]
+.venv/
+python_backend/service-account*.json

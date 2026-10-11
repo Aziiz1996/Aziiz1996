@@ -1,0 +1,7 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // The backend distributes accepted files with revocable download tokens.
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}
