@@ -13,7 +13,7 @@ const scrypt = promisify(scryptCallback);
 const dataDir = resolve(process.env.LEADER_DATA_DIR || '.leader-data');
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const db = new DatabaseSync(resolve(dataDir, 'leader.sqlite'));
-db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, owner INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL);');
+db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, owner INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS course_summaries (user_id TEXT NOT NULL, course_id TEXT NOT NULL, summary_json TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(user_id, course_id));');
 const staticRoot = resolve('dist');
 const attempts = new Map();
 const moodleConnections = new Map();
@@ -200,8 +200,10 @@ const server = http.createServer(async (req, res) => {
      const index = data.notes.findIndex(item => item.id === id);
      if (index >= 0) data.notes[index] = note; else data.notes.push(note);
      if (!validateData(data)) throw new Error('invalid-summary');
-     const serialized = JSON.stringify(data); db.prepare('UPDATE users SET data=? WHERE id=?').run(serialized, user.id);
-     return json(res, 200, accountJson({ ...user, data:serialized }, { summary:{ title:generated.title, concepts:generated.concepts } }));
+     const serialized = JSON.stringify(data); const updatedAt = new Date().toISOString();
+     db.prepare('UPDATE users SET data=? WHERE id=?').run(serialized, user.id);
+     db.prepare('INSERT INTO course_summaries (user_id,course_id,summary_json,updated_at) VALUES (?,?,?,?) ON CONFLICT(user_id,course_id) DO UPDATE SET summary_json=excluded.summary_json, updated_at=excluded.updated_at').run(user.id, course.id, JSON.stringify(generated), updatedAt);
+     return json(res, 200, accountJson({ ...user, data:serialized }, { summary:generated }));
     } catch { return json(res, 502, { error:'تعذّر إنشاء الملخص حالياً. تحقق من مفتاح OpenAI وحاول مجدداً.' }); }
    }
    if (path === '/api/data' && req.method === 'PUT') {
