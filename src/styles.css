@@ -1043,3 +1043,41 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .account-bar > .btn-primary { font-size: 9px; padding: 8px; white-space: normal; }
 }
 @media print { .account-bar { display: none !important; } .app-shell { padding-top: 0; } }
+
+/* توقيع المطور في الشاشات الرئيسية دون مزاحمة المحتوى. */
+.main:has(.dashboard-grid)::after,
+.main:has(.settings-grid)::after {
+  content: 'تصميم وتطوير  •  عبد العزيز مجلي';
+  display: block;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  margin: 8px auto 34px;
+  padding: 10px 20px;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 8px 24px rgba(11, 27, 61, .05);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .1px;
+  text-align: center;
+}
+.main:has(.dashboard-grid)::after { color: #0B1B3D; border-inline-start: 3px solid #FF6B00; }
+.auth-card { padding-bottom: 68px; }
+.auth-card::before {
+  content: 'تصميم وتطوير  •  عبد العزيز مجلي';
+  position: absolute;
+  right: 28px;
+  left: 28px;
+  bottom: 20px;
+  padding-top: 14px;
+  color: #64748B;
+  border-top: 1px solid #E2E8F0;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+@media (max-width: 480px) {
+  .main:has(.dashboard-grid)::after, .main:has(.settings-grid)::after { margin-bottom: 24px; font-size: 10px; }
+}
