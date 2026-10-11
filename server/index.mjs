@@ -58,7 +58,12 @@ const server = http.createServer(async (req, res) => {
      if (user) return json(res, 409, { error: 'اسم المستخدم غير متاح.' });
      const salt = randomBytes(16).toString('hex'); const passwordHash = Buffer.from(await scrypt(password, salt, 64)).toString('hex');
      const ownerKey = process.env.LEADER_OWNER_SETUP_KEY;
-     const owner = !!ownerKey && typeof payload.ownerKey === 'string' && timingSafeEqual(Buffer.from(hash(ownerKey)), Buffer.from(hash(payload.ownerKey))) && !db.prepare('SELECT id FROM users WHERE owner=1').get();
+     const ownerExists = !!db.prepare('SELECT id FROM users WHERE owner=1').get();
+     const accountCount = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
+     const validOwnerKey = !!ownerKey && typeof payload.ownerKey === 'string' && timingSafeEqual(Buffer.from(hash(ownerKey)), Buffer.from(hash(payload.ownerKey)));
+     // On simple deployments without a setup key, the first account safely closes
+     // the one-time owner bootstrap. Hosted deployments can still require a key.
+     const owner = !ownerExists && (validOwnerKey || (!ownerKey && accountCount === 0));
      const id = randomUUID(); const data = emptyData(); data.settings.name = username;
      db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?)').run(id, username, salt, passwordHash, owner ? 1 : 0, JSON.stringify(data));
      user = db.prepare('SELECT * FROM users WHERE id=?').get(id);
@@ -66,6 +71,13 @@ const server = http.createServer(async (req, res) => {
      const expected = user ? Buffer.from(user.password_hash, 'hex') : Buffer.alloc(64);
      const actual = Buffer.from(await scrypt(password, user?.salt || 'invalid-user-salt', 64));
      if (!user || !timingSafeEqual(expected, actual)) return json(res, 401, { error: 'اسم المستخدم أو كلمة المرور غير صحيحة.' });
+     const ownerKey = process.env.LEADER_OWNER_SETUP_KEY;
+     const ownerExists = !!db.prepare('SELECT id FROM users WHERE owner=1').get();
+     const accountCount = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
+     if (!ownerKey && !ownerExists && accountCount === 1) {
+      db.prepare('UPDATE users SET owner=1 WHERE id=?').run(user.id);
+      user = db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
+     }
     }
     if (path.endsWith('/login')) attempts.delete(ip); return session(res, user);
    }

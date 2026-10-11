@@ -50,3 +50,22 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   assert.notEqual(stored.password_hash, 'synthetic-password-one'); assert.equal(stored.password_hash.length,128); database.close();
  } finally { processHandle.kill(); await once(processHandle, 'exit'); rmSync(directory,{ recursive:true, force:true }); }
 });
+
+test('first account becomes owner automatically when no setup key is configured', async () => {
+ const directory = mkdtempSync(join(tmpdir(), 'leader-first-owner-test-'));
+ const port = 31480; const base = 'http://127.0.0.1:' + port;
+ const environment = { ...process.env, PORT: String(port), LEADER_DATA_DIR: directory, NODE_ENV: 'test' };
+ delete environment.LEADER_OWNER_SETUP_KEY;
+ const processHandle = spawn(process.execPath, ['--experimental-strip-types', 'server/index.mjs'], { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+ try {
+  await Promise.race([once(processHandle.stdout, 'data'), once(processHandle, 'exit').then(() => { throw new Error('Server failed'); }), new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Startup timeout')), 10000); timer.unref(); })]);
+  async function register(username) {
+   const response = await fetch(base + '/api/auth/register', { method:'POST', headers:{ Origin:base, 'Content-Type':'application/json' }, body:JSON.stringify({ username, password:'synthetic-password-one' }) });
+   return { response, json:await response.json() };
+  }
+  const first = await register('operator@example.com');
+  assert.equal(first.response.status, 200); assert.equal(first.json.user.owner, true);
+  const second = await register('student@example.com');
+  assert.equal(second.response.status, 200); assert.equal(second.json.user.owner, false);
+ } finally { processHandle.kill(); await once(processHandle, 'exit'); rmSync(directory,{ recursive:true, force:true }); }
+});
