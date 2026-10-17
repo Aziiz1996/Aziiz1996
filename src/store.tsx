@@ -19,6 +19,7 @@ interface AppContextValue {
   accountId?: string; data: AppData; page: Page; update: (recipe: (draft: AppData) => void) => void;
   notify: (message: string) => void; navigate: (page: Page) => void;
   replace: (data: AppData) => boolean; storageError: string; recoveryRaw: string | null;
+  back: () => void; forward: () => void; canGoBack: boolean; canGoForward: boolean; forwardPage: Page | null;
 }
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -26,11 +27,16 @@ export function AppProvider({ children, accountData, accountId }: { children: Re
   const [initial] = useState(() => accountData ? { data: accountData, error: "", recoveryRaw: null } : loadData());
   const saveQueue = useRef(Promise.resolve());
   const [data, setData] = useState<AppData>(initial.data);
+  const dataRef = useRef(data);
   const [storageError, setStorageError] = useState(initial.error);
   const [recoveryRaw, setRecoveryRaw] = useState(initial.recoveryRaw);
-  const [page, setPage] = useState<Page>('dashboard');
+  const pages: Page[] = ['university', 'groups', 'exams', 'assistant', 'dashboard', 'courses', 'plan', 'tasks', 'practice', 'logistics', 'notes', 'finance', 'profile', 'opportunities', 'settings', 'owner', 'updates'];
+  const pageFromUrl = (): Page => pages.includes(window.location.hash.slice(1) as Page) ? window.location.hash.slice(1) as Page : 'dashboard';
+  const [page, setPage] = useState<Page>(pageFromUrl);
+  const [navigation, setNavigation] = useState(() => ({ pages: [page] as Page[], index: 0 }));
+  const navigationRef = useRef(navigation);
+  const navigationSession = useRef(crypto.randomUUID());
   const [toast, setToast] = useState('');
-  useEffect(() => { const home = () => { setPage('dashboard'); window.scrollTo({ top:0, behavior:'smooth' }); }; window.addEventListener('az-logistics-home', home); return () => window.removeEventListener('az-logistics-home', home); }, []);
   const notify = useCallback((message: string) => setToast(message), []);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); }, [toast]);
   const persist = useCallback((next: AppData, allowRecovery = false) => {
@@ -49,25 +55,44 @@ export function AppProvider({ children, accountData, accountId }: { children: Re
     catch { setStorageError('لم تُحفظ آخر التغييرات على الجهاز. صدّر نسخة احتياطية من الإعدادات قبل إغلاق التطبيق.'); }
   }, [recoveryRaw, accountData, accountId]);
   const update = useCallback((recipe: (draft: AppData) => void) => {
-    setData(previous => { const next = structuredClone(previous); recipe(next); persist(next); return next; });
+    const next = structuredClone(dataRef.current);
+    recipe(next); dataRef.current = next; persist(next); setData(next);
   }, [persist]);
   const replace = useCallback((next: AppData) => {
     if (!validateData(next)) return false;
-    setData(structuredClone(next)); setRecoveryRaw(null); persist(next, true); return true;
+    const value = structuredClone(next); dataRef.current = value;
+    setData(value); setRecoveryRaw(null); persist(value, true); return true;
   }, [persist]);
   useEffect(() => {
-    if (accountData || !import.meta.env.DEV || initial.error) return;
-    try { if (localStorage.getItem(STORAGE_KEY)) return; } catch { return; }
-    const controller = new AbortController();
-    fetch('/__madar_profile', { signal: controller.signal }).then(async response => {
-      if (!response.ok) return;
-      const value: unknown = await response.json();
-      if (validateData(value) && !localStorage.getItem(STORAGE_KEY)) replace(value);
-    }).catch(() => { /* Optional personal profile; ordinary installations start empty. */ });
-    return () => controller.abort();
-  }, [initial.error, replace, accountData]);
-  const navigate = useCallback((next: Page) => { setPage(next); window.scrollTo({ top: 0, behavior: 'smooth' }); }, []);
-  return <AppContext.Provider value={{ accountId, data, page, update, notify, navigate, replace, storageError, recoveryRaw }}>
+    const current = navigationRef.current;
+    window.history.replaceState({ madarSession: navigationSession.current, index: current.index }, '', `#${current.pages[current.index]}`);
+    const onPop = (event: PopStateEvent) => {
+      const state = event.state;
+      const route = pageFromUrl();
+      const current = navigationRef.current;
+      const index = state?.madarSession === navigationSession.current && Number.isInteger(state.index) && current.pages[state.index] === route ? state.index : -1;
+      const next = index >= 0 ? { ...current, index } : { pages: [route], index: 0 };
+      navigationRef.current = next; setNavigation(next); setPage(route);
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const navigate = useCallback((next: Page) => {
+    const previous = navigationRef.current;
+    if (previous.pages[previous.index] !== next) {
+      // A direct hash link can create an entry without our state; retain it before pushing.
+      window.history.replaceState({ madarSession: navigationSession.current, index: previous.index }, '', `#${previous.pages[previous.index]}`);
+      const current = { pages: [...previous.pages.slice(0, previous.index + 1), next], index: previous.index + 1 };
+      navigationRef.current = current; setNavigation(current); setPage(next);
+      window.history.pushState({ madarSession: navigationSession.current, index: current.index }, '', `#${next}`);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+  const back = useCallback(() => { if (navigationRef.current.index > 0) window.history.back(); }, []);
+  const forward = useCallback(() => { if (navigationRef.current.index < navigationRef.current.pages.length - 1) window.history.forward(); }, []);
+  useEffect(() => { const home = () => navigate('dashboard'); window.addEventListener('az-logistics-home', home); return () => window.removeEventListener('az-logistics-home', home); }, [navigate]);
+  return <AppContext.Provider value={{ accountId, data, page, update, notify, navigate, replace, storageError, recoveryRaw, back, forward, canGoBack: navigation.index > 0, canGoForward: navigation.index < navigation.pages.length - 1, forwardPage: navigation.pages[navigation.index + 1] ?? null }}>
     {children}
     {toast && <div className="toast" role="status">{toast}</div>}
   </AppContext.Provider>;

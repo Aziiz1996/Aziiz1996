@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AlertCircle, BookOpen, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, GraduationCap, ListChecks, MapPin, Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
+import { AlertCircle, BookOpen, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, GraduationCap, ListChecks, MapPin, Pencil, Play, Plus, Settings2, Sparkles, Trash2 } from 'lucide-react';
 import NotesPage from './Notes';
+import StudyCoach from './StudyCoach';
+import { allocateStudySeconds, studyPhases } from './studyMethods';
 import { useApp, validUniversityUrl } from './store';
 import { CourseBadge, EmptyState, Field, Modal, SectionHeader } from './ui';
 import { buildStudyPlan, daysUntil, formatDate, todayISO } from './logic';
-import type { Course, Lecture, Priority, Task, TaskKind } from './types';
+import type { Course, Lecture, Priority, StudySession, Task, TaskKind } from './types';
 
 const DAYS = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const COLORS = ['#7567dd', '#3a9387', '#d89943', '#d67591', '#588ec5', '#b37e58'];
@@ -12,8 +14,9 @@ const KIND_NAMES: Record<TaskKind, string> = { exam: 'اختبار', assignment:
 const PRIORITY_NAMES: Record<Priority, string> = { low: 'منخفضة', medium: 'متوسطة', high: 'عالية' };
 
 function durationText(minutes: number) {
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
+  const rounded = Math.max(0, Math.round(minutes * 10) / 10);
+  const hours = Math.floor(rounded / 60);
+  const rest = Math.round((rounded % 60) * 10) / 10;
   return hours && rest ? `${hours} س و${rest} د` : hours ? `${hours} س` : `${rest} د`;
 }
 
@@ -291,8 +294,31 @@ export function TasksPage({ initialKind = 'all' }: { initialKind?: TaskKind | 'a
   </div>;
 }
 
+function StudyReviewPanel() {
+  const { data, update, notify } = useApp();
+  const today = todayISO();
+  const logs = data.studyLog ?? [];
+  const reviews = logs.flatMap(log => log.reviewDates.filter(date => !log.reviewedDates.includes(date)).map(date => ({ log, date }))).sort((a, b) => a.date.localeCompare(b.date));
+  const due = reviews.filter(review => review.date <= today).length;
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? reviews : reviews.slice(0, 6);
+  function markReviewed(id: string, date: string) {
+    update(draft => {
+      const log = draft.studyLog?.find(item => item.id === id);
+      if (log && date <= today && log.reviewDates.includes(date) && !log.reviewedDates.includes(date)) log.reviewedDates.push(date);
+    });
+    notify('سُجّلت مراجعتك. جرّب سؤالاً جديداً لتتأكد من فهمك');
+  }
+  return <section className="card study-reviews">
+    <div className="card-heading"><div><span className="eyebrow">حتى تبقى المعلومة</span><h2>مراجعاتك وسجل تعلمك</h2><p className="muted">المراجعة تبدأ باسترجاع الفكرة دون النظر، ثم تصحيح ما فاتك.</p></div>{due > 0 && <span className="badge badge-warning">{due} مراجعات مستحقة</span>}</div>
+    {reviews.length ? <><div className="study-review-list">{visible.map(({ log, date }) => <article className="study-review-row" key={`${log.id}-${date}`}><div><strong>{log.title}</strong><p className="muted">{formatDate(date, true)} · {date < today ? 'فات موعدها؛ راجعها اليوم' : date === today ? 'موعدها اليوم' : 'مراجعة قادمة'}</p>{log.reflection && <p className="muted">نقطة الجلسة: {log.reflection}</p>}<p className="field-hint">اشرح أهم فكرة من الذاكرة، ثم أجب عن سؤال وصحح إجابتك.</p></div><button type="button" className="btn btn-secondary" disabled={date > today} onClick={() => markReviewed(log.id, date)} aria-label={`راجعت ${log.title} · ${date}`}><Check size={16} />{date > today ? 'في موعدها' : 'راجعت الآن'}</button></article>)}</div>{reviews.length > 6 && <button className="btn btn-ghost" onClick={() => setShowAll(!showAll)}>{showAll ? 'عرض أقل' : `عرض كل المراجعات (${reviews.length})`}</button>}</> : <p className="muted">{logs.length ? 'لا توجد مراجعات معلقة. تظهر مواعيد جديدة بعد حفظ جلسة ذات وقت فعلي.' : 'ابدأ جلسة من جدولك واحفظ وقتك الفعلي؛ سنرتب مراجعاتك حسب تقييم فهمك.'}</p>}
+    <details className="study-history"><summary>سجل الجلسات · {logs.length} جلسات · {Math.round(logs.reduce((sum, log) => sum + log.minutes, 0) * 10) / 10} دقيقة فعلية</summary>{logs.length ? <div className="study-review-list">{logs.slice(0, 20).map(log => <article className="study-review-row" key={log.id}><div><strong>{log.title}</strong><p className="muted">{formatDate(log.date, true)} · {log.minutes} دقيقة فعلية · فهم {log.score} / ٥</p>{log.reflection && <p className="muted">{log.reflection}</p>}<span className="field-hint">مراجعات منجزة: {log.reviewedDates.length} من {log.reviewDates.length}</span></div><CheckCircle2 size={18} /></article>)}</div> : <p className="muted">سجلك فارغ الآن؛ كل خطوة فعلية ستظهر هنا.</p>}{logs.length > 20 && <p className="field-hint">تظهر أحدث ٢٠ جلسة. جميع الجلسات محفوظة ضمن النسخة الاحتياطية.</p>}</details>
+  </section>;
+}
+
 export function PlanPage() {
-  const { data, navigate } = useApp();
+  const { data, update, navigate } = useApp();
+  const [coachOpen, setCoachOpen] = useState(false);
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setClock(new Date()), 60000); return () => clearInterval(timer); }, []);
   const plan = useMemo(() => buildStudyPlan(data), [data, clock]);
@@ -307,8 +333,23 @@ export function PlanPage() {
   const upcoming = openTasks.slice().sort((a, b) => a.due.localeCompare(b.due)).slice(0, 5);
   const uncertainLectures = data.lectures.some(lecture => !lecture.start || !lecture.end);
   const uncertainExams = data.tasks.some(task => !task.completed && task.kind === 'exam' && (!task.time || !task.endTime));
+  function startSession(session: StudySession) {
+    const id = crypto.randomUUID();
+    const timestamp = Date.now();
+    update(draft => {
+      if (draft.activeStudy) return;
+      const task = draft.tasks.find(item => item.id === session.taskId);
+      if (!task || task.completed || task.minutes <= 0) return;
+      const plannedMinutes = Math.min(session.minutes, task.minutes);
+      const stepRemaining = allocateStudySeconds(plannedMinutes, task.kind);
+      draft.activeStudy = { id, taskId: task.id, title: task.title, date: todayISO(), plannedMinutes, kind: task.kind, step: 0, remainingSeconds: stepRemaining[0], stepRemaining, runningSince: timestamp, elapsedSeconds: 0, reflection: '' };
+    });
+    setCoachOpen(true);
+  }
   return <div className="page-content">
-    <SectionHeader eyebrow="ثباتك أهم من كثرة ساعاتك" title="خطة المذاكرة" description="خطة تتجدد تلقائياً للـ٢٨ يوماً القادمة، حسب مهامك ومواعيدك ووقتك المتاح." action={<button className="btn btn-secondary" onClick={() => navigate('settings')}><Settings2 size={17} />تخصيص وقتي</button>} />
+    <SectionHeader eyebrow="خطوة اليوم تصنع غداً أجمل" title="الخطة الدراسية" description="خطة تتجدد تلقائياً للـ٢٨ يوماً القادمة، حسب مهامك ومواعيدك ووقتك المتاح. افتح أي جلسة لتجد وقت كل خطوة وطريقة تنفيذها." action={<button className="btn btn-secondary" onClick={() => navigate('settings')}><Settings2 size={17} />تخصيص وقتي</button>} />
+    {data.activeStudy && <section className="card study-resume"><div><span className="eyebrow">نكمل من حيث توقفت</span><h2>{data.activeStudy.title}</h2><p className="muted">الخطوة {data.activeStudy.step + 1} من ٥ · تقدمك محفوظ؛ نكمل من آخر خطوة.</p></div><button className="btn btn-primary" onClick={() => setCoachOpen(true)}><Play size={17} />استكمال جلستي</button></section>}
+    <section className="card study-methods"><div className="card-heading"><div><span className="eyebrow"><Sparkles size={15} /> مرشدك خطوة بخطوة</span><h2>تعلّم كيف تتعلم، ثم كرّر ما ينفعك.</h2><p className="muted">نقدّم الأقرب موعداً، ونحترم محاضراتك واستراحاتك. داخل كل جلسة يتوزع الوقت حسب مدتها ونوع المهمة.</p></div></div><ol className="coach-steps">{studyPhases(45).map((phase, index) => <li className="coach-step" key={phase.id}><span>{index + 1}</span><strong>{phase.title}</strong><small>{['هدف صغير قابل للقياس', 'شرح بكلماتك مع مثال', 'أسئلة والمصدر مغلق', 'محاولة ثم تصحيح', 'وقت فعلي ومراجعة قادمة'][index]}</small></li>)}</ol><p className="field-hint">ابدأ بزر «ابدأ معي» بجانب جلستك. يمكنك التوقف والعودة، والوقت المحفوظ هو ما درسته فعلاً. خذ ٥–١٠ دقائق استراحة بين جلسات التركيز.</p></section>
     {!available && <div className="notice notice-warning"><AlertCircle size={21} /><div><strong>حدّد وقت المذاكرة أولاً</strong><p>اختر أيامك المتاحة وعدد الدقائق اليومي لنبني خطة تناسب أسبوعك.</p></div><button className="btn btn-secondary" onClick={() => navigate('settings')}>تحديد الوقت</button></div>}
     {(uncertainLectures || uncertainExams) && <div className="notice notice-warning"><Clock3 size={21} /><div><strong>نحتاج تأكيد بعض المواعيد لتوزيع وقتك بدقة</strong>{uncertainLectures && <p>المحاضرة دون بداية مؤكدة تمنع جلسات المذاكرة في يومها الأسبوعي، ودون نهاية مؤكدة تمنع الجلسات بعد بدايتها حتى نهاية اليوم.</p>}{uncertainExams && <p>الاختبار دون بداية مؤكدة يُحضّر له قبل يومه. وإذا تأكدت البداية دون النهاية، نترك بقية يوم الاختبار بعد البداية خالية.</p>}</div><button className="btn btn-secondary" onClick={() => navigate(uncertainLectures ? 'courses' : 'tasks')}>تأكيد المواعيد</button></div>}
     {available && plan.unscheduledMinutes > 0 && <div className="notice notice-warning"><AlertCircle size={21} /><div><strong>لديك وقت لم يُجدول بعد</strong><p>تبقّى {durationText(plan.unscheduledMinutes)} خارج الخطة الحالية. قد تكون المهام متأخرة، أو وقتك غير كافٍ، أو المواعيد أبعد من ٢٨ يوماً. راجع المواعيد والمدة المتبقية ووقتك المتاح.</p></div><button className="btn btn-secondary" onClick={() => navigate('settings')}>تعديل وقتي</button></div>}
@@ -319,13 +360,16 @@ export function PlanPage() {
           <div className="card-heading study-day-heading"><div><h2>{date === today ? 'اليوم' : DAYS[new Date(`${date}T12:00:00`).getDay()]}</h2><span className="muted">{formatDate(date, true)}</span></div><span className="chip"><Clock3 size={14} />{durationText(daySessions.reduce((sum, session) => sum + session.minutes, 0))}</span></div>
           <div className="sessions">{daySessions.map(session => <div className="session" key={session.id}>
             <div className="session-time" dir="ltr"><strong>{session.start}</strong><span>{session.end}</span></div><div className="session-body"><span className={`badge kind-${session.kind}`}>{KIND_NAMES[session.kind]}</span><h3>{session.title}</h3><div className="row"><CourseBadge id={session.courseId} /><span className="muted">{durationText(session.minutes)}</span></div></div>
+            <button className="btn btn-secondary session-start" onClick={() => startSession(session)} disabled={Boolean(data.activeStudy)} aria-label={`ابدأ معي: ${session.title} · ${session.date} ${session.start}`}><Play size={15} />ابدأ معي</button>
           </div>)}</div>
         </article>) : <div className="card"><EmptyState icon={Clock3} title={available ? 'لا توجد جلسات في هذه الفترة' : 'لنجهّز وقتك المتاح'} description={available ? 'قد تكون المهام خارج الأيام السبعة أو لا يتوفر وقت قبل مواعيدها. اعرض كامل الخطة وراجع وقتك المتاح.' : 'أضف أيام المذاكرة والمدة اليومية من الإعدادات.'} action={<button className="btn btn-secondary" onClick={() => available ? setRange('all') : navigate('settings')}>{available ? 'عرض كامل الخطة' : 'فتح الإعدادات'}</button>} /></div>}
       </section><aside className="plan-sidebar stack">
         <section className="card"><h2>المواعيد الأقرب</h2><div className="deadline-list">{upcoming.map(task => <button key={task.id} className="deadline-item" onClick={() => navigate('tasks')}><span className={`deadline-dot kind-${task.kind}`} /><div><strong>{task.title}</strong><span className="muted">{KIND_NAMES[task.kind]} · {formatDate(task.due, true)}</span>{plan.remaining[task.id] > 0 && <span className="unscheduled-label">{durationText(plan.remaining[task.id])} لم تُجدول</span>}</div></button>)}</div></section>
-        <section className="card study-tip"><span className="eyebrow">مذاكرة أذكى</span><h2>ابدأ، ثم خذ نفساً.</h2><p className="muted">قسّم الجلسة إلى فترات تركيز قصيرة، وخذ استراحة بينها. بعد كل جلسة، عدّل الوقت المتبقي للمهمة حتى تعكس الخطة تقدمك.</p><button className="btn btn-ghost" onClick={() => navigate('tasks')}>تحديث مهامي</button></section>
+        <section className="card study-tip"><span className="eyebrow">مذاكرة أذكى</span><h2>افهم، جرّب، ثم صحّح.</h2><p className="muted">حدد فكرة واحدة عندما يكون وقتك قصيراً. اشرحها دون النظر ثم حل سؤالاً. بعد الجلسة يُخصم الوقت الفعلي الذي تؤكده من وقت التحضير المتبقي؛ إنجاز المذاكرة لا يغيّر حالة الاختبار أو تسليم الواجب.</p><button className="btn btn-ghost" onClick={() => navigate('notes')}>افتح ملخصاتي</button></section>
         <p className="plan-disclaimer muted">هذه خطة تقديرية. راجعها مع جدولك الفعلي ووقت التنقل والاستراحات؛ المواعيد وحدها لا تضمن نتيجة الاختبار.</p>
       </aside></div>
     </>}
+    <StudyReviewPanel />
+    {coachOpen && <StudyCoach onClose={() => setCoachOpen(false)} />}
   </div>;
 }

@@ -1,4 +1,5 @@
 import type { AppData, ImportedQuiz } from "./types.ts";
+import { validateExtensions } from './dataExtensions.ts';
 export const STORAGE_KEY = 'madar.student.v1';
 export function validUniversityUrl(value: string) {
   if (!value) return true;
@@ -28,6 +29,7 @@ export function validImportedQuiz(q:unknown):q is ImportedQuiz {
 export function validateData(value: unknown): value is AppData {
   if (!isObject(value) || value.version !== 1 || !isObject(value.settings) || (value.demo !== undefined && typeof value.demo !== 'boolean') || (value.profile !== undefined && typeof value.profile !== 'boolean')) return false;
   if(value.quizzes!==undefined&&(!Array.isArray(value.quizzes)||value.quizzes.length>20||!value.quizzes.every(validImportedQuiz)||new Set(value.quizzes.map(q=>q.id)).size!==value.quizzes.length))return false;
+  if (!validateExtensions(value)) return false;
   const s = value.settings;
   if (value.projectGroups !== undefined && (!Array.isArray(value.projectGroups) || value.projectGroups.length > 1000 || !value.projectGroups.every(g => isObject(g) && typeof g.id === 'string' && g.id.length > 0 && g.id.length < 150 && textValue(g.name) && textValue(g.notes) && Array.isArray(g.members) && g.members.length <= 9 && g.members.every(textValue)) || new Set(value.projectGroups.map(g => g.id)).size !== value.projectGroups.length)) return false;
   if ((s.universityName !== undefined && !textValue(s.universityName)) || (s.universityUrl !== undefined && (typeof s.universityUrl !== 'string' || !validUniversityUrl(s.universityUrl)))) return false;

@@ -1,6 +1,12 @@
-import type { AppData, StudyPlan, Task, Transaction } from './types.ts';
+import type { AppData, Lecture, StudyPlan, Task, Transaction } from './types.ts';
 
 const MINUTES_IN_DAY = 24 * 60;
+
+/** Bundled lesson cards are reading resources until their real lecture times are entered. */
+export function isLessonTemplate(lecture: Lecture): boolean {
+  return /^inventory-lecture-[1-5]$/.test(lecture.id) && !lecture.start && !lecture.end
+    && lecture.timePending === 'حدّد الموعد ورابط الحضور من منصة مودل';
+}
 
 /** Parse at local noon so display and date arithmetic never shift a calendar day. */
 function parseDate(value: string): Date | null {
@@ -97,7 +103,7 @@ export function buildStudyPlan(data: AppData, today?: string): StudyPlan {
       cursor = Math.max(cursor, now.getHours() * 60 + now.getMinutes() + (now.getSeconds() > 0 || now.getMilliseconds() > 0 ? 1 : 0));
     }
     let budget = dailyBudget;
-    const occupied = data.lectures.filter(lecture => lecture.day === weekday)
+    const occupied = data.lectures.filter(lecture => lecture.day === weekday && !isLessonTemplate(lecture))
       .map(lecture => {
         const start = timeMinutes(lecture.start);
         const end = timeMinutes(lecture.end, true);

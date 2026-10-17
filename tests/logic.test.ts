@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addDays, buildStudyPlan, daysUntil, financeSummary, formatDate, summarizeText, todayISO } from '../src/logic.ts';
+import { addDays, buildStudyPlan, daysUntil, financeSummary, formatDate, isLessonTemplate, summarizeText, todayISO } from '../src/logic.ts';
 import type { AppData, Task, Transaction } from '../src/types.ts';
 
 const origin = '2026-10-11'; // Sunday
@@ -229,4 +229,17 @@ test('financial decimals stay exact at currency precision and blank categories g
   const transactions = [transaction('a', 'income', 0.3), transaction('b', 'expense', 0.1, ' '), transaction('c', 'expense', 0.2, '')];
   assert.deepEqual(financeSummary(transactions, '2026-10'), { income: 0.3, expense: 0.3, balance: 0,
     categories: [{ name: 'أخرى', amount: 0.3 }] });
+});
+
+test('reading cards with unpublished lecture times leave study time available; real unknown lectures still reserve it', () => {
+  const value = data([task({ minutes: 60, due: origin, kind: 'assignment' })]);
+  const template = { id: 'inventory-lecture-1', courseId: 'inventory-management', day: 0, start: '', end: '', location: 'المحاضرة الأولى', timePending: 'حدّد الموعد ورابط الحضور من منصة مودل' };
+  value.lectures = [template];
+  assert.equal(isLessonTemplate(template), true);
+  assert.equal(buildStudyPlan(value, origin).sessions.reduce((sum, session) => sum + session.minutes, 0), 60);
+  value.lectures = [{ ...template, id: 'real-university-lecture' }];
+  assert.equal(buildStudyPlan(value, origin).sessions.length, 0);
+  value.lectures = [{ ...template, start: '17:00', end: '18:00' }];
+  assert.equal(isLessonTemplate(value.lectures[0]), false);
+  assert.equal(buildStudyPlan(value, origin).sessions[0].start, '18:00');
 });

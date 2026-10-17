@@ -4,13 +4,34 @@ import ImportedQuizzes from './ImportedQuizzes';
 import AzQuiz from './AzQuiz';
 import { SectionHeader } from './ui';
 import { LOGISTICS_QUESTIONS } from './logisticsContent';
+import InventoryPractice from './InventoryPractice';
 
 export default function PracticePage() {
+  const [tab, setTab] = useState<'inventory' | 'library'>('inventory');
+  function changeTab(next: 'inventory' | 'library', focus = false) {
+    setTab(next);
+    if (focus) requestAnimationFrame(() => document.getElementById(`practice-tab-${next}`)?.focus());
+  }
+  return <div className="page-content stack">
+    <div className="logistics-mode-tabs" role="tablist" aria-label="مصادر الاختبارات التدريبية" onKeyDown={event => {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); changeTab(tab === 'inventory' ? 'library' : 'inventory', true); }
+      else if (event.key === 'Home') { event.preventDefault(); changeTab('inventory', true); }
+      else if (event.key === 'End') { event.preventDefault(); changeTab('library', true); }
+    }}>
+      <button id="practice-tab-inventory" role="tab" aria-controls="practice-panel-inventory" aria-selected={tab === 'inventory'} tabIndex={tab === 'inventory' ? 0 : -1} className={tab === 'inventory' ? 'active' : ''} onClick={() => changeTab('inventory')}>بنك المخزون · ٤٠ سؤالاً</button>
+      <button id="practice-tab-library" role="tab" aria-controls="practice-panel-library" aria-selected={tab === 'library'} tabIndex={tab === 'library' ? 0 : -1} className={tab === 'library' ? 'active' : ''} onClick={() => changeTab('library')}>مكتبتي واختباراتي الأخرى</button>
+    </div>
+    <section id="practice-panel-inventory" role="tabpanel" aria-labelledby="practice-tab-inventory" hidden={tab !== 'inventory'} style={{ display: tab !== 'inventory' ? 'none' : undefined }}><InventoryPractice /></section>
+    <section id="practice-panel-library" role="tabpanel" aria-labelledby="practice-tab-library" hidden={tab !== 'library'} style={{ display: tab !== 'library' ? 'none' : undefined }}><ExistingPracticeLibrary /></section>
+  </div>;
+}
+
+function ExistingPracticeLibrary() {
   const questions = LOGISTICS_QUESTIONS;
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
   const score = questions.filter((q, i) => answers[i] === q.correct).length;
-  return <div className="page-content stack">
+  return <div className="stack">
     <MaterialImport />
     <ImportedQuizzes />
     <details><summary>اختبار التطبيق العام</summary><AzQuiz /></details>

@@ -11,6 +11,8 @@ import { PROVIDED_MATERIALS } from '../src/providedMaterials.ts';
 import { LOGISTICS_LESSONS } from '../src/logisticsContent.ts';
 import { connectMoodle, syncMoodle } from './moodle.mjs';
 import { generateAcademicSummary } from './openai.mjs';
+import { createOwnerDesignService } from './owner-design.mjs';
+import { handleNewsRequest } from './news.mjs';
 
 const scrypt = promisify(scryptCallback);
 const dataDir = resolve(process.env.LEADER_DATA_DIR || '.leader-data');
@@ -18,6 +20,7 @@ mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const db = new DatabaseSync(resolve(dataDir, 'leader.sqlite'));
 db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, owner INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS course_summaries (user_id TEXT NOT NULL, course_id TEXT NOT NULL, summary_json TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(user_id, course_id));');
 db.exec('CREATE TABLE IF NOT EXISTS recovery_codes (hash TEXT PRIMARY KEY, user_id TEXT UNIQUE NOT NULL)');
+const ownerDesign = createOwnerDesignService(db);
 const staticRoot = resolve(process.env.LEADER_STATIC_DIR || 'dist');
 const attempts = new Map();
 const moodleConnections = new Map();
@@ -79,9 +82,15 @@ function userJson(user) {
 }
 function accountJson(user, extra = {}) { return { ...extra, user:userJson(user), data:JSON.parse(user.data) }; }
 async function body(req) {
- let count = 0; const chunks = [];
- for await (const chunk of req) { count += chunk.length; if (count > 4 * 1024 * 1024) throw new Error('body-size'); chunks.push(chunk); }
- return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+ const maximum = 10 * 1024 * 1024;
+ if (Number(req.headers['content-length']) > maximum) { req.resume(); throw new Error('body-size'); }
+ return new Promise((resolveBody, reject) => {
+  let count=0, chunks=[], settled=false;
+  const fail=error=>{if(!settled){settled=true;chunks=[];reject(error);}};
+  req.on('data',chunk=>{if(settled)return;count+=chunk.length;if(count>maximum){fail(new Error('body-size'));return;}chunks.push(chunk);});
+  req.on('end',()=>{if(settled)return;try{const value=JSON.parse(Buffer.concat(chunks).toString('utf8'));settled=true;resolveBody(value);}catch(error){fail(error);}});
+  req.on('error',fail);req.on('aborted',()=>fail(new Error('body-aborted')));
+ });
 }
 function session(res, user, extra = {}) {
  user = withSharedContent(user);
@@ -123,6 +132,7 @@ const server = http.createServer(async (req, res) => {
      db.prepare('DELETE FROM sessions WHERE user_id=?').run(match.user_id); db.exec('COMMIT');
     } catch(error) { db.exec('ROLLBACK'); throw error; }
     moodleConnections.delete(match.user_id);
+    await ownerDesign.removeInitialCredentials(match.user_id);
     return session(res,db.prepare('SELECT * FROM users WHERE id=?').get(match.user_id));
    }
    if (['/api/auth/register', '/api/auth/login'].includes(path) && req.method === 'POST') {
@@ -130,7 +140,9 @@ const server = http.createServer(async (req, res) => {
     const record = attempts.get(ip);
     const attempt = !record || record.until < now ? { count: 0, until: now + 15 * 60 * 1000 } : record;
     attempts.set(ip, attempt); if (++attempt.count > 20) return json(res, 429, { error: 'محاولات كثيرة. انتظر قليلاً ثم حاول مجدداً.' });
-    const payload = await body(req); const username = String(payload.username || '').trim().normalize('NFKC').toLowerCase(); const password = payload.password;
+    const payload = await body(req); let username = String(payload.username || '').trim().normalize('NFKC').toLowerCase(); const password = payload.password;
+    // This technical alias is accepted only for the deliberately initialized owner account.
+    if (path.endsWith('/login') && username === 'aziiz1996' && db.prepare('SELECT id FROM users WHERE username=? AND owner=1').get('aziiz1996@owner.invalid')) username = 'aziiz1996@owner.invalid';
     if (!/^[a-z0-9.!#$%&*+\/=?^_{}|~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(username) || username.length > 254 || typeof password !== 'string' || password.length < (path.endsWith('/register') ? 5 : 3) || password.length > 128) return json(res, 400, { error: 'أدخل بريداً إلكترونياً صحيحاً وكلمة مرور جديدة من ٥ خانات على الأقل.' });
     let user = db.prepare('SELECT * FROM users WHERE username=?').get(username);
     if (path.endsWith('/register')) {
@@ -163,6 +175,28 @@ const server = http.createServer(async (req, res) => {
    }
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
+   if (path === '/api/news' && req.method === 'GET' && await handleNewsRequest(req, res)) return;
+   if (path === '/api/design' && req.method === 'GET') return json(res, 200, ownerDesign.getDesign());
+   if (path.startsWith('/api/owner/')) {
+    if (!user.owner) return json(res, 403, { error:'هذه العملية متاحة لمدير التطبيق فقط.' });
+    if (req.method !== 'GET' && req.headers['x-leader-account'] !== user.id) return json(res, 403, { error:'تغيّر الحساب. أعد الدخول قبل حفظ التعديلات.' });
+    if (path === '/api/owner/design' && req.method === 'PUT') {
+     const saved = ownerDesign.saveDesign(await body(req));
+     return saved ? json(res,200,saved) : json(res,400,{error:'إعدادات المظهر أو القائمة غير صالحة.'});
+    }
+    if (path === '/api/owner/data' && req.method === 'GET') {
+     const saved = ownerDesign.getBackup(user.id);
+     if (!saved) return json(res,404,{error:'لا توجد نسخة يدوية محفوظة بعد. احفظ نسخة من لوحة المالك أولاً.'});
+     if (!validateData(saved)) return json(res,422,{error:'النسخة المحفوظة غير صالحة؛ لم تتغير بيانات حسابك.'});
+     return json(res,200,saved);
+    }
+    if (path === '/api/owner/data' && req.method === 'PUT') {
+     const value = await body(req);
+     if (!validateData(value)) return json(res,400,{error:'النسخة غير صالحة؛ لم تتغير بيانات حسابك.'});
+     ownerDesign.saveBackup(user.id,value); return json(res,200,{saved:true});
+    }
+    return json(res,404,{error:'المسار غير موجود.'});
+   }
    if (path === '/api/auth/session' && req.method === 'GET') {
     const hydrated = withSharedContent(user);
     return json(res, 200, { user:userJson(hydrated), data: JSON.parse(hydrated.data) });
@@ -199,6 +233,7 @@ const server = http.createServer(async (req, res) => {
     db.prepare('UPDATE users SET salt=?, password_hash=? WHERE id=?').run(salt, passwordHash, user.id);
     db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
     db.prepare('DELETE FROM recovery_codes WHERE user_id=?').run(user.id);
+    await ownerDesign.removeInitialCredentials(user.id);
     return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
    }
    if (path === '/api/auth/claim-owner' && req.method === 'POST') {
@@ -298,6 +333,6 @@ const server = http.createServer(async (req, res) => {
   const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.svg':'image/svg+xml', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.pdf':'application/pdf' };
   if (!privateLesson) res.setHeader('Cache-Control', path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
   res.setHeader('Content-Type', types[extname(file)] || 'application/octet-stream'); res.writeHead(200); res.end(req.method === 'HEAD' ? undefined : content);
- } catch (error) { json(res, 400, { error: error.message === 'body-size' ? 'البيانات أكبر من الحد المسموح.' : 'تعذّر تنفيذ الطلب.' }); }
+ } catch (error) { json(res, error.message === 'body-size' ? 413 : 400, { error: error.message === 'body-size' ? 'البيانات أكبر من الحد المسموح: ١٠ ميغابايت.' : 'تعذّر تنفيذ الطلب.' }); }
 });
 server.listen(Number(process.env.PORT || 3001), process.env.LEADER_BIND_HOST || '127.0.0.1', () => console.log('Leader server is ready.'));

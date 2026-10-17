@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 const assets = (await readdir('dist/assets')).map(name => './assets/' + name);
 const html = await readFile('dist/index.html', 'utf8');
 const version = createHash('sha256').update(html + assets.join('')).digest('hex').slice(0, 12);
-const urls = ['./', './index.html', './leader-icon.png', './leader-icon-large.png', './logistics-warehouse.svg', './logistics-network.svg', './logistics-planning.svg', './manifest.webmanifest', ...assets];
+const urls = ['./', './index.html', './leader-icon.png', './leader-icon-large.png', './logistics-warehouse.svg', './logistics-network.svg', './logistics-planning.svg', './manifest.webmanifest', './logistics-terminology.jpg', ...assets];
 const sw = `const CACHE = 'az-logistics-${version}';
 const URLS = ${JSON.stringify(urls)};
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(URLS))));

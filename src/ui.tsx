@@ -25,7 +25,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     const oldOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const focusable = () => Array.from(ref.current?.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex="0"]') ?? []).filter(el => !el.hasAttribute('disabled'));
-    focusable()[1]?.focus();
+    focusable()[1]?.focus({ preventScroll: true });
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCloseRef.current();
       if (event.key === 'Tab') {
@@ -35,7 +35,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
       }
     };
     document.addEventListener('keydown', onKey);
-    return () => { document.body.style.overflow = oldOverflow; document.removeEventListener('keydown', onKey); previous?.focus(); };
+    return () => { document.body.style.overflow = oldOverflow; document.removeEventListener('keydown', onKey); previous?.focus({ preventScroll: true }); };
   }, []);
   return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div ref={ref} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId.current}><header className="modal-header"><h2 id={titleId.current}>{title}</h2><button className="icon-button" aria-label="إغلاق النافذة" onClick={onClose}><X size={20} /></button></header><div className="modal-body">{children}</div></div></div>;
 }

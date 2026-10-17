@@ -1,9 +1,9 @@
 import { useHeaderLayout } from './headerLayout';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CalendarDays, Check, ChevronLeft, CircleHelp, ClipboardList, Clock3, ExternalLink, FileText, GraduationCap, LayoutDashboard, Settings2, Sparkles, Target, Wallet, AlertCircle, Users, BriefcaseBusiness } from 'lucide-react';
+import { ArrowRight, BookOpen, Menu, Newspaper, ShieldCheck, UserRound, ArrowLeft, CalendarDays, Check, ChevronLeft, CircleHelp, ClipboardList, Clock3, ExternalLink, FileText, GraduationCap, LayoutDashboard, Settings2, Sparkles, Target, Wallet, AlertCircle, Users, BriefcaseBusiness } from 'lucide-react';
 import { AppProvider, useApp } from './store';
-import { CourseBadge, EmptyState } from './ui';
-import { addDays, buildStudyPlan, daysUntil, financeSummary, formatDate, todayISO } from './logic';
+import { CourseBadge, EmptyState, Modal } from './ui';
+import { addDays, buildStudyPlan, daysUntil, financeSummary, formatDate, isLessonTemplate, todayISO } from './logic';
 import { CoursesPage, PlanPage, TasksPage } from './Academic';
 import AuthGate from './AuthGate';
 import UniversityPage from './University';
@@ -14,6 +14,12 @@ import AssistantPage from './Assistant';
 import NotesPage from './Notes';
 import FinancePage from './Finance';
 import SettingsPage from './Settings';
+import ProfilePage from './Profile';
+import LogisticsPage from './Logistics';
+import UpdatesPage from './Updates';
+import OwnerPage from './Owner';
+import { getStudentProfile } from './dataExtensions';
+import { AuthProvider, useAuth } from './auth';
 import type { Page } from './types';
 import { LOGISTICS_TERMS } from './logisticsContent';
 
@@ -30,6 +36,10 @@ const NAV = [
   { id: 'tasks', label: 'المهام والاختبارات', icon: ClipboardList },
   { id: 'notes', label: 'ملخصات المواد', icon: FileText },
   { id: 'finance', label: 'ميزانيتي', icon: Wallet },
+  { id: 'profile', label: 'الملف الشخصي', icon: UserRound },
+  { id: 'logistics', label: 'دليل اللوجستيات', icon: BookOpen },
+  { id: 'updates', label: 'جديد التخصص', icon: Newspaper },
+  { id: 'owner', label: 'لوحة المالك', icon: ShieldCheck },
   { id: 'settings', label: 'الإعدادات', icon: Settings2 },
 ] as const;
 const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
@@ -38,14 +48,16 @@ const number = (value: number) => new Intl.NumberFormat('ar-SA', { maximumFracti
 
 function Dashboard() {
   const { data, navigate, update } = useApp();
+  const { design, username } = useAuth();
+  const displayName = data.settings.name || username || '';
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setClock(new Date()), 60000); return () => clearInterval(timer); }, []);
   const today = todayISO(clock);
   const plan = useMemo(() => buildStudyPlan(data), [data, clock]);
   const sessions = plan.sessions.filter(s => s.date === today);
-  const lectures = data.lectures.filter(l => l.day === clock.getDay());
+  const lectures = data.lectures.filter(l => l.day === clock.getDay() && !isLessonTemplate(l));
   const universityEvents = (data.universityEvents ?? []).filter(event => event.date === today);
-  const schedule = [...lectures.map(l => ({ id: l.id, start: l.start, end: l.end, title: data.courses.find(c => c.id === l.courseId)?.name ?? 'محاضرة', courseId: l.courseId, detail: l.location || 'محاضرة جامعية', kind: 'lecture' })), ...universityEvents.map(event => ({ id:event.id, start:event.time, end:event.endTime ?? '', title:event.title, courseId:event.courseId ?? '', detail:event.description || 'موعد مستورد من مودل', kind:event.kind })), ...sessions.map(s => ({ id: s.id, start: s.start, end: s.end, title: s.title, courseId: s.courseId, detail: `${s.minutes} دقيقة مذاكرة`, kind: 'study' })), ...data.tasks.filter(t => t.kind === 'exam' && t.due === today && !t.completed && !universityEvents.some(event => `${event.id}-task` === t.id)).map(t => ({ id: t.id, start: t.time ?? '', end: t.endTime ?? '', title: t.title, courseId: t.courseId, detail: t.timePending ?? 'موعد اختبار', kind: 'exam' }))].sort((a, b) => a.start.localeCompare(b.start));
+  const schedule = [...lectures.map(l => ({ id: l.id, start: l.start ?? '', end: l.end ?? '', title: data.courses.find(c => c.id === l.courseId)?.name ?? 'محاضرة', courseId: l.courseId, detail: l.location || 'محاضرة جامعية', kind: 'lecture' })), ...universityEvents.map(event => ({ id:event.id, start:event.time, end:event.endTime ?? '', title:event.title, courseId:event.courseId ?? '', detail:event.description || 'موعد مستورد من مودل', kind:event.kind })), ...sessions.map(s => ({ id: s.id, start: s.start, end: s.end, title: s.title, courseId: s.courseId, detail: `${s.minutes} دقيقة مذاكرة`, kind: 'study' })), ...data.tasks.filter(t => t.kind === 'exam' && t.due === today && !t.completed && !universityEvents.some(event => `${event.id}-task` === t.id)).map(t => ({ id: t.id, start: t.time ?? '', end: t.endTime ?? '', title: t.title, courseId: t.courseId, detail: t.timePending ?? 'موعد اختبار', kind: 'exam' }))].sort((a, b) => a.start.localeCompare(b.start));
   const active = data.tasks.filter(t => !t.completed);
   const deadlines = active.slice().sort((a, b) => a.due.localeCompare(b.due)).slice(0, 5);
   const upcomingExams = active.filter(t => t.kind === 'exam' && t.due >= today).length;
@@ -68,9 +80,10 @@ function Dashboard() {
   return <div className="page-content">
     <div className="row study-shortcuts"><button className="btn btn-secondary" onClick={() => navigate('university')}><GraduationCap size={20} />الجامعة — الكلية التطبيقية</button><button className="btn btn-secondary" onClick={() => navigate('opportunities')}><BriefcaseBusiness size={20} />فرص سلاسل الإمداد</button><button className="btn btn-secondary" onClick={() => navigate('groups')}><Users size={20} />مجموعات المشاريع</button><button className="btn btn-secondary" onClick={() => navigate('notes')}><FileText size={20} />ملخصات المواد</button><button className="btn btn-secondary" onClick={() => navigate('courses')}><GraduationCap size={20} />المحاضرات</button><button className="btn btn-secondary" onClick={() => navigate('exams')}><CalendarDays size={20} />جدول الاختبارات</button><button className="btn btn-secondary" onClick={() => navigate('practice')}><CircleHelp size={20} />اختبارات تجريبية</button></div>
     <section className="welcome-card">
-      <div className="welcome-copy"><span className="hero-tag"><Sparkles size={14} /> مساحتك، على طريقتك</span><h1>أهلاً{data.settings.name ? `، ${data.settings.name}` : ' بك'} 👋<br />خطوة اليوم تصنع فرق الغد.</h1><p>دراستك ومواعيدك ومصروفاتك، في مكان يخفف الزحام ويترك لك وقتاً للتركيز.</p><button className="btn btn-primary" onClick={() => navigate(data.courses.length ? 'plan' : 'courses')}>{data.courses.length ? 'شاهد خطة المذاكرة' : 'ابدأ بإضافة موادك'}<ArrowLeft size={18} /></button></div>
+      <div className="welcome-copy"><span className="hero-tag"><Sparkles size={14} /> مساحتك، على طريقتك</span><h1>أهلاً{displayName ? `، ${displayName}` : ' بك يا لوجستي'} 👋<br />{design.welcomeTitle}</h1><p>{design.welcomeMessage}</p><button className="btn btn-primary" onClick={() => navigate(data.courses.length ? 'plan' : 'courses')}>{data.courses.length ? 'شاهد خطة المذاكرة' : 'ابدأ بإضافة موادك'}<ArrowLeft size={18} /></button></div>
       <div className="welcome-art" aria-hidden="true"><span className="orbit" /><span className="art-book" /><span className="art-book-two" /><span className="art-star">✦</span></div>
     </section>
+    <button className="logistics-feature" onClick={() => navigate('logistics')}><span className="logistics-feature-icon"><img src={`${import.meta.env.BASE_URL}logistics-terminology.jpg`} alt="دليل مصطلحات اللوجستيات" /></span><span><strong>مصطلحات اللوجستيات في متناولك</strong><span>٥٠ مصطلحاً من صورتك · بحث وبطاقات مراجعة وتدريب</span></span><ArrowLeft size={22} /></button>
     <section className="logistics-showcase" aria-label="مجالات سلاسل الإمداد">
       <button className="logistics-scene warehouse" onClick={() => navigate('courses')}><span>إدارة المستودعات</span><strong>من الاستلام إلى الصرف</strong></button>
       <button className="logistics-scene network" onClick={() => navigate('opportunities')}><span>النقل والتوزيع</span><strong>شبكة تصل المورد بالعميل</strong></button>
@@ -104,11 +117,58 @@ function Dashboard() {
   </div>;
 }
 
-function Shell() {
-  useHeaderLayout();
-  const { data, page, navigate, storageError } = useApp();
-  const current = NAV.find(n => n.id === page)!;
-  return <div className="app-shell"><aside className="sidebar"><button className="brand" onClick={() => navigate('dashboard')} aria-label="عز اللوجستيات، الصفحة الرئيسية"><span className="brand-icon"><img src="./leader-icon.png" alt="" /></span><span><strong>عز اللوجستيات</strong><small className="brand-caption">رفيق دبلوم سلاسل الإمداد</small></span></button><span className="sidebar-label">مساحتك اليومية</span><nav aria-label="التنقل الرئيسي">{NAV.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'nav-item active' : 'nav-item'} aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id as Page)}><Icon size={20} /><span>{label}</span>{id === 'tasks' && data.tasks.filter(t => !t.completed).length > 0 && <span className="nav-count">{number(data.tasks.filter(t => !t.completed).length)}</span>}</button>)}{data.settings.universityUrl && <a className="nav-item university-link" href={data.settings.universityUrl} target="_blank" rel="noopener noreferrer" aria-label="فتح موقع الجامعة في نافذة جديدة"><ExternalLink size={20} /><span>موقع الجامعة</span></a>}</nav><div className="sidebar-bottom"><span className="sidebar-quote">خفّف الزحام.<br />اترك مساحة للإنجاز.</span><div className="sidebar-profile"><span className="avatar">{data.settings.name?.[0] || 'م'}</span><div><strong>{data.settings.name || 'مساحتي الشخصية'}</strong><span>خطوة بخطوة ✦</span></div><button className="icon-button" aria-label="تعديل الملف والتفضيلات" onClick={() => navigate('settings')}><Settings2 size={18} /></button></div></div></aside><main className="main"><header className="topbar"><div className="topbar-title"><span>مساحتي</span><ChevronLeft size={14} /><strong>{current.label}</strong></div><div className="topbar-actions"><span className="today-label"><CalendarDays size={17} />{formatDate(todayISO(), true)}</span><button className="avatar" aria-label="فتح الإعدادات" onClick={() => navigate('settings')}>{data.settings.name?.[0] || 'م'}</button></div></header>{storageError && <div className="notice danger storage-warning" role="alert">{storageError}</div>}{data.demo && <div className="notice demo-banner"><Sparkles size={18} /><span>هذه بيانات تجريبية. ابدأ ببياناتك من الإعدادات.</span><button className="btn btn-ghost" onClick={() => navigate('settings')}>فتح الإعدادات</button></div>}{page === 'university' && <UniversityPage />}{page === 'opportunities' && <OpportunitiesPage />}{page === 'groups' && <GroupsPage />}{page === 'practice' && <PracticePage />}{page === 'exams' && <TasksPage key="exams" initialKind="exam" />}{page === 'assistant' && <AssistantPage />}{page === 'dashboard' && <Dashboard />}{page === 'courses' && <CoursesPage />}{page === 'plan' && <PlanPage />}{page === 'tasks' && <TasksPage key="tasks" />}{page === 'notes' && <NotesPage />}{page === 'finance' && <div className="page-content"><FinancePage /></div>}{page === 'settings' && <div className="page-content"><SettingsPage /></div>}</main></div>;
+function Avatar() {
+  const { data } = useApp();
+  const profile = getStudentProfile(data);
+  return profile.photo ? <img src={profile.photo.dataUrl} alt="الصورة الشخصية" /> : <>{profile.fullName?.[0] || 'م'}</>;
 }
 
-export default function App() { return <AuthGate>{session => <AppProvider key={`${session.user.id}-${session.user.owner}`} accountData={session.data} accountId={session.user.id}><Shell /></AppProvider>}</AuthGate>; }
+function Shell() {
+  useHeaderLayout();
+  const { data, page, navigate, storageError, back, forward, canGoBack, canGoForward, forwardPage } = useApp();
+  const { design, authenticated, username } = useAuth();
+  const profile = getStudentProfile(data);
+  const orderedNav = [...design.navigation, ...NAV.map(item => item.id).filter(id => !design.navigation.includes(id))].map(id => NAV.find(item => item.id === id)).filter((item): item is typeof NAV[number] => !!item && (item.id !== 'owner' || authenticated) && (item.id === 'owner' || item.id === 'dashboard' || !design.hiddenPages.includes(item.id)));
+  const current = NAV.find(n => n.id === page) ?? NAV[0];
+  const next = canGoForward ? NAV.find(n => n.id === forwardPage) : orderedNav[orderedNav.findIndex(n => n.id === current.id) + 1];
+  const accountName = profile.fullName || username || 'مساحتي الشخصية';
+  const activeTasks = data.tasks.filter(t => !t.completed).length;
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => { if (window.innerWidth < 780) document.querySelector('.nav-item[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [page]);
+  return <div className="app-shell">
+    <aside className="sidebar">
+      <button className="brand" onClick={() => navigate('dashboard')} aria-label={`${design.appName}، الصفحة الرئيسية`}><span className="brand-icon"><img src="./leader-icon.png" alt="" /></span><span><strong>{design.appName}</strong><small className="brand-caption">رفيق دبلوم سلاسل الإمداد</small></span></button>
+      <span className="sidebar-label">مساحتك اليومية</span>
+      <nav aria-label="التنقل الرئيسي">{orderedNav.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'nav-item active' : 'nav-item'} aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id as Page)}><Icon size={20} /><span>{label}</span>{id === 'tasks' && activeTasks > 0 && <span className="nav-count">{number(activeTasks)}</span>}</button>)}
+        {data.settings.universityUrl && <a className="nav-item university-link" href={data.settings.universityUrl} target="_blank" rel="noopener noreferrer" aria-label="فتح موقع الجامعة في نافذة جديدة"><ExternalLink size={20} /><span>موقع الجامعة</span></a>}
+      </nav>
+      <div className="sidebar-bottom"><span className="sidebar-quote">خطوة اليوم<br />تصنع غداً أجمل.</span><div className="sidebar-profile"><button className="avatar profile-avatar" aria-label="عرض الملف الشخصي" onClick={() => navigate('profile')}><Avatar /></button><div><strong>{accountName}</strong><span>{authenticated ? 'المالك · المبرمج · المصمم' : 'خطوة بخطوة ✦'}</span></div><button className="icon-button" aria-label="تعديل التفضيلات" onClick={() => navigate('settings')}><Settings2 size={18} /></button></div></div>
+    </aside>
+    <main className="main">
+      <header className="topbar"><div className="topbar-title"><span>مساحتي</span><ChevronLeft size={14} /><strong>{current.label}</strong></div><div className="topbar-actions"><span className="today-label"><CalendarDays size={17} />{formatDate(todayISO(), true)}</span><button className="account-chip" aria-label="فتح الملف الشخصي" onClick={() => navigate('profile')}><span className="avatar profile-avatar"><Avatar /></span><span className="account-copy"><span className="account-caption">{authenticated ? 'حساب المالك' : 'أهلاً وسهلاً'}</span><strong className="account-name">{accountName}</strong></span></button></div></header>
+      {storageError && <div className="notice danger storage-warning" role="alert">{storageError}</div>}
+      {data.demo && <div className="notice demo-banner"><Sparkles size={18} /><span>هذه بيانات تجريبية. ابدأ ببياناتك من الإعدادات.</span><button className="btn btn-ghost" onClick={() => navigate('settings')}>فتح الإعدادات</button></div>}
+      {page === 'university' && <UniversityPage />}
+      {page === 'groups' && <GroupsPage />}
+      {page === 'exams' && <TasksPage key="exams" initialKind="exam" />}
+      {page === 'assistant' && <AssistantPage />}
+      {page === 'dashboard' && <Dashboard />}
+      {page === 'courses' && <CoursesPage />}
+      {page === 'plan' && <PlanPage />}
+      {page === 'tasks' && <TasksPage key="tasks" />}
+      {page === 'practice' && <PracticePage />}
+      {page === 'logistics' && <div className="page-content"><LogisticsPage /></div>}
+      {page === 'updates' && <div className="page-content"><UpdatesPage /></div>}
+      {page === 'notes' && <NotesPage />}
+      {page === 'finance' && <div className="page-content"><FinancePage /></div>}
+      {page === 'profile' && <div className="page-content"><ProfilePage /></div>}
+      {page === 'opportunities' && <div className="page-content"><OpportunitiesPage /></div>}
+      {page === 'settings' && <div className="page-content"><SettingsPage /></div>}
+      {page === 'owner' && <div className="page-content"><OwnerPage /></div>}
+      <nav className="page-navigation" aria-label="التنقل بين الصفحات"><button className="btn btn-secondary" disabled={!canGoBack} onClick={back}><ArrowRight size={18} />عودة</button><button className="btn btn-secondary menu-button" onClick={() => setMenuOpen(true)}><Menu size={18} />القائمة</button><span className="page-navigation-current">{current.label}</span><button className="btn btn-primary" disabled={!next} onClick={() => { if (canGoForward) forward(); else if (next) navigate(next.id); }}>التالي{next && <span className="next-page-label">: {next.label}</span>}<ArrowLeft size={18} /></button></nav>
+      {menuOpen && <Modal title="القائمة الرئيسية" onClose={() => setMenuOpen(false)}><div className="app-menu-intro"><strong>أهلاً {profile.fullName || 'بك يا لوجستي'} 👋</strong><p className="muted">اختر مساحتك، أو أغلق القائمة لتكمل من الصفحة نفسها.</p></div><div className="app-menu-grid">{orderedNav.map(({ id, label, icon: Icon }) => <button key={id} className={`app-menu-item ${id === page ? 'active' : ''}`} onClick={() => { navigate(id); setMenuOpen(false); }}><Icon size={24} /><span>{label}</span>{id === page && <small>أنت هنا</small>}</button>)}</div><button className="btn btn-secondary" onClick={() => setMenuOpen(false)}>العودة إلى {current.label}</button></Modal>}
+    </main>
+  </div>;
+}
+
+export default function App() { return <AuthGate>{session => <AuthProvider user={session.user}><AppProvider key={`${session.user.id}-${session.user.owner}`} accountData={session.data} accountId={session.user.id}><Shell /></AppProvider></AuthProvider>}</AuthGate>; }

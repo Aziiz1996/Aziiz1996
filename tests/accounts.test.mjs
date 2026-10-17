@@ -40,15 +40,15 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   assert.equal(member.json.data.quizzes[0].questions.length,40);
   assert.deepEqual(member.json.data.notes.map(n => n.id), owner.json.data.notes.map(n => n.id));
   const personal = member.json.data; personal.notes[0].summary = 'Member private edit';
-  personal.notes.push({ id:'private-member-note', courseId:'', title:'Private', content:'Secret', summary:'Secret', updatedAt:new Date().toISOString() });
+  personal.notes.push({ id:'private-member-note', courseId:'', title:'سياسة مخزوني الخاصة', content:'المخزون التجريبي الخاص يستخدم ترتيب دفعات سرياً للمراجعة.', summary:'ملاحظة مخزون خاصة', updatedAt:new Date().toISOString() });
   assert.equal((await request('/api/data', { method:'PUT', cookie:member.cookie, account:member.json.user.id, value:personal })).response.status,200);
   const refreshed = await request('/api/auth/session', { cookie:member.cookie });
   assert.equal(refreshed.json.data.notes.length, STARTER_NOTES + 1);
   assert.equal(refreshed.json.data.notes[0].summary, 'Member private edit');
   assert.equal((await request('/api/ai/status',{cookie:member.cookie})).json.tutorEnabled,false);
-  const tutor=await request('/api/ai/tutor',{method:'POST',cookie:member.cookie,value:{question:'Secret',useAI:false}});
+  const tutor=await request('/api/ai/tutor',{method:'POST',cookie:member.cookie,value:{question:'سياسة مخزوني الخاصة',useAI:false}});
   assert.equal(tutor.response.status,200);assert.ok(tutor.json.sources.some(n=>n.id==='private-member-note'));
-  const ownerTutor=await request('/api/ai/tutor',{method:'POST',cookie:owner.cookie,value:{question:'Secret',useAI:false}});
+  const ownerTutor=await request('/api/ai/tutor',{method:'POST',cookie:owner.cookie,value:{question:'سياسة مخزوني الخاصة',useAI:false}});
   assert.ok(!ownerTutor.json.sources.some(n=>n.id==='private-member-note'));
   assert.equal((await request('/api/ai/tutor',{method:'POST',cookie:member.cookie,value:{question:'ABC',useAI:true}})).response.status,503);
 

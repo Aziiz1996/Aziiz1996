@@ -4,18 +4,19 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build && node scripts/build-offline.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --experimental-strip-types --test tests/logic.test.ts tests/calendar.test.ts tests/academicAlerts.test.ts tests/studyMaterials.test.ts tests/moodle.test.mjs tests/openai.test.mjs tests/tutor.test.mjs",
-    "test:browser": "python3 tests/browser_smoke.py",
+    "test": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
+    "test:browser": "python3 tests/az_browser_smoke.py",
     "ios:sync": "npm run build && cap sync ios",
     "ios:open": "cap open ios",
     "start": "node --experimental-strip-types server/index.mjs",
-    "test:accounts": "node --experimental-strip-types --test tests/accounts.test.mjs"
+    "test:accounts": "node --experimental-strip-types --test tests/accounts.test.mjs",
+    "owner:init": "node --experimental-strip-types server/initialize-owner.mjs"
   },
   "dependencies": {
     "@capacitor-community/speech-recognition": "^7.0.1",
