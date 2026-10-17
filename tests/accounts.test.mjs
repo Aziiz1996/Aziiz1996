@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -9,8 +9,11 @@ import { emptyData } from '../src/validation.ts';
 
 test('account isolation, signout, owner files, origin checks, and password hashing', async () => {
  const directory = mkdtempSync(join(tmpdir(), 'leader-account-test-'));
+ const fixtureRoot = join(directory, 'static');
+ mkdirSync(join(fixtureRoot, 'personal-lessons'), { recursive:true });
+ writeFileSync(join(fixtureRoot, 'personal-lessons', 'index.json'), JSON.stringify({ lessons:[{ title:'Synthetic private lesson' }] }));
  const port = 31479; const base = 'http://127.0.0.1:' + port;
- const processHandle = spawn(process.execPath, ['--experimental-strip-types', 'server/index.mjs'], { env: { ...process.env, OPENAI_API_KEY:'', PORT: String(port), LEADER_DATA_DIR: directory, LEADER_OWNER_SETUP_KEY: 'synthetic-owner-setup-key', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'] });
+ const processHandle = spawn(process.execPath, ['--experimental-strip-types', 'server/index.mjs'], { env: { ...process.env, OPENAI_API_KEY:'', PORT: String(port), LEADER_DATA_DIR: directory, LEADER_STATIC_DIR: fixtureRoot, LEADER_OWNER_SETUP_KEY: 'synthetic-owner-setup-key', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'] });
  try {
   await Promise.race([once(processHandle.stdout, 'data'), once(processHandle, 'exit').then(() => { throw new Error('Server failed'); }), new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Startup timeout')), 10000); timer.unref(); })]);
   async function request(path, { method='GET', cookie='', value, origin=base, account } = {}) {
