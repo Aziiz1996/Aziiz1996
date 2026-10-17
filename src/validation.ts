@@ -1,4 +1,4 @@
-import type { AppData } from "./types.ts";
+import type { AppData, ImportedQuiz } from "./types.ts";
 export const STORAGE_KEY = 'madar.student.v1';
 export function validUniversityUrl(value: string) {
   if (!value) return true;
@@ -19,8 +19,15 @@ const validDate = (x: unknown) => {
 const validTime = (x: unknown) => typeof x === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(x);
 const boundedNumber = (x: unknown, min: number, max: number) => typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max;
 
+export function validImportedQuiz(q:unknown):q is ImportedQuiz {
+ const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
+ const text=(v:unknown,max=200000)=>typeof v==='string'&&!!v.trim()&&v.length<=max;
+ return object(q)&&text(q.id,149)&&text(q.title,200)&&Array.isArray(q.questions)&&q.questions.length>0&&q.questions.length<=200&&new Set(q.questions.map(x=>object(x)?x.id:null)).size===q.questions.length&&q.questions.every(x=>object(x)&&text(x.id,149)&&text(x.question,5000)&&Array.isArray(x.options)&&x.options.length>=2&&x.options.length<=8&&x.options.every(o=>text(o,2000))&&Number.isInteger(x.correct)&&Number(x.correct)>=0&&Number(x.correct)<x.options.length);
+}
+
 export function validateData(value: unknown): value is AppData {
   if (!isObject(value) || value.version !== 1 || !isObject(value.settings) || (value.demo !== undefined && typeof value.demo !== 'boolean') || (value.profile !== undefined && typeof value.profile !== 'boolean')) return false;
+  if(value.quizzes!==undefined&&(!Array.isArray(value.quizzes)||value.quizzes.length>20||!value.quizzes.every(validImportedQuiz)||new Set(value.quizzes.map(q=>q.id)).size!==value.quizzes.length))return false;
   const s = value.settings;
   if (value.projectGroups !== undefined && (!Array.isArray(value.projectGroups) || value.projectGroups.length > 1000 || !value.projectGroups.every(g => isObject(g) && typeof g.id === 'string' && g.id.length > 0 && g.id.length < 150 && textValue(g.name) && textValue(g.notes) && Array.isArray(g.members) && g.members.length <= 9 && g.members.every(textValue)) || new Set(value.projectGroups.map(g => g.id)).size !== value.projectGroups.length)) return false;
   if ((s.universityName !== undefined && !textValue(s.universityName)) || (s.universityUrl !== undefined && (typeof s.universityUrl !== 'string' || !validUniversityUrl(s.universityUrl)))) return false;

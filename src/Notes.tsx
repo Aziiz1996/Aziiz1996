@@ -4,6 +4,7 @@ import { useApp } from './store';
 import { CourseBadge, EmptyState, Field, Modal, SectionHeader } from './ui';
 import { formatDate, summarizeText, todayISO } from './logic';
 import type { Note } from './types';
+import MaterialImport from './MaterialImport';
 import StudyLibrary from './StudyLibrary';
 
 function exportNote(note: Note) {
@@ -122,7 +123,7 @@ export default function NotesPage({ initialCourseId }: { initialCourseId?: strin
     finally { setAiBusy(false); }
   }
   return <div className="page-content">
-    {!initialCourseId && <StudyLibrary />}
+    {!initialCourseId && <><MaterialImport /><StudyLibrary /></>}
     <SectionHeader eyebrow="معرفتك، مرتّبة" title="ملخصات المواد" description="احتفظ بنصوص المحاضرات، واستخرج منها ملخصات أولية تراجعها بأسلوبك." action={<div className="row"><button className="btn btn-secondary" disabled={!data.courses.length} onClick={() => { setAiCourseId(data.courses[0]?.id ?? ''); setAiError(''); setAiOpen(true); }}><Sparkles size={18} />ملخص ذكي للمادة</button><button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={18} />إضافة ملاحظة</button></div>} />
     {data.notes.length === 0 ? <EmptyState icon={BookOpenText} title="مساحة لأفكارك وملاحظاتك" description="أضف نص المحاضرة، ثم أنشئ ملخصاً أولياً من الجمل المهمة وراجعه قبل المذاكرة." action={<button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={18} />إضافة أول ملاحظة</button>} /> : <>
       <div className="filters notes-filters"><div className="search-field"><Search size={18} /><input className="input" value={query} onChange={event => setQuery(event.target.value)} placeholder="ابحث في الملاحظات والملخصات…" aria-label="البحث في الملاحظات" /></div><select className="input" value={courseId} onChange={event => setCourseId(event.target.value)} aria-label="تصفية الملاحظات حسب المادة"><option value="all">كل المواد</option><option value="">بدون مادة</option>{data.courses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select><span className="muted note-count">{notes.length} ملاحظات</span></div>

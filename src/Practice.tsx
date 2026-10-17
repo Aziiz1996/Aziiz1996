@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import MaterialImport from './MaterialImport';
+import ImportedQuizzes from './ImportedQuizzes';
 import AzQuiz from './AzQuiz';
 import { SectionHeader } from './ui';
 import { LOGISTICS_QUESTIONS } from './logisticsContent';
@@ -9,7 +11,9 @@ export default function PracticePage() {
   const [submitted, setSubmitted] = useState(false);
   const score = questions.filter((q, i) => answers[i] === q.correct).length;
   return <div className="page-content stack">
-    <AzQuiz />
+    <MaterialImport />
+    <ImportedQuizzes />
+    <details><summary>اختبار التطبيق العام</summary><AzQuiz /></details>
     <SectionHeader eyebrow="تدرّب خطوة بخطوة" title="اختبارات تجريبية" description="تدريب تمهيدي في سلاسل الإمداد مع تصحيح وتفسير للإجابة." />
     <p className="notice">أسئلة تدريب من المحاضرات الخمس المتاحة في المشروع، مع تفسير للإجابات. ليست اختبارات رسمية للجامعة.</p>
     {questions.map((q, i) => <section className="card stack" key={q.question}><h2>{i + 1}. {q.question}</h2>{q.options.map((option, j) => <label className="row" key={option}><input type="radio" name={`practice-${i}`} checked={answers[i] === j} disabled={submitted} onChange={() => setAnswers(old => ({ ...old, [i]: j }))} />{option}</label>)}{submitted && <p className="notice">{answers[i] === q.correct ? 'إجابة صحيحة.' : `الإجابة الصحيحة: ${q.options[q.correct]}.`} {q.explanation}</p>}</section>)}
