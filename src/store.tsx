@@ -1,5 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AppData, Page } from './types';
+import { validateData } from './dataValidation';
+import { useAuth } from './auth';
+export { validateData } from './dataValidation';
 
 export const STORAGE_KEY = 'madar.student.v1';
 export function validUniversityUrl(value: string) {
@@ -11,36 +14,6 @@ export const emptyData = (): AppData => ({
   settings: { name: '', currency: 'SAR', monthlyBudget: 0, dailyMinutes: 90, studyStart: '18:00', studyDays: [0, 1, 2, 3, 4, 6] },
 });
 
-const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
-const textValue = (x: unknown) => typeof x === 'string' && x.length <= 200000;
-const validDate = (x: unknown) => {
-  if (typeof x !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(x)) return false;
-  const d = new Date(x + 'T12:00:00');
-  return !Number.isNaN(d.getTime()) && `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` === x;
-};
-const validTime = (x: unknown) => typeof x === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(x);
-const boundedNumber = (x: unknown, min: number, max: number) => typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max;
-
-export function validateData(value: unknown): value is AppData {
-  if (!isObject(value) || value.version !== 1 || !isObject(value.settings) || (value.demo !== undefined && typeof value.demo !== 'boolean') || (value.profile !== undefined && typeof value.profile !== 'boolean')) return false;
-  const s = value.settings;
-  if ((s.universityName !== undefined && !textValue(s.universityName)) || (s.universityUrl !== undefined && (typeof s.universityUrl !== 'string' || !validUniversityUrl(s.universityUrl)))) return false;
-  if (!textValue(s.name) || typeof s.currency !== 'string' || !['SAR', 'AED', 'KWD', 'USD', 'EUR', 'EGP', 'QAR', 'BHD', 'OMR'].includes(s.currency) || !boundedNumber(s.monthlyBudget, 0, 1e9) || !boundedNumber(s.dailyMinutes, 0, 720) || !validTime(s.studyStart) || !Array.isArray(s.studyDays) || !s.studyDays.every(d => Number.isInteger(d) && d >= 0 && d <= 6) || new Set(s.studyDays).size !== s.studyDays.length) return false;
-  for (const key of ['courses', 'lectures', 'tasks', 'notes', 'transactions']) {
-    const rows = value[key];
-    if (!Array.isArray(rows) || rows.length > 10000 || !rows.every(x => isObject(x) && typeof x.id === 'string' && x.id.length > 0 && x.id.length < 150) || new Set(rows.map(x => x.id)).size !== rows.length) return false;
-  }
-  const courses = value.courses as Record<string, unknown>[];
-  const courseIds = new Set(courses.map(c => c.id));
-  const courseRef = (id: unknown) => id === '' || courseIds.has(id);
-  const optionalTime = (x: unknown) => x === undefined || x === '' || validTime(x);
-  if (value.incomeRules !== undefined && (!Array.isArray(value.incomeRules) || value.incomeRules.length > 1000 || new Set(value.incomeRules.map(r => r?.id)).size !== value.incomeRules.length || !value.incomeRules.every(r => isObject(r) && textValue(r.id) && textValue(r.title) && textValue(r.category) && boundedNumber(r.amount, 0.01, 1e9) && (r.day === null || (Number.isInteger(r.day) && boundedNumber(r.day, 1, 31)))))) return false;
-  return courses.every(c => textValue(c.name) && typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color)) &&
-    (value.lectures as Record<string, unknown>[]).every(l => courseIds.has(l.courseId) && Number.isInteger(l.day) && boundedNumber(l.day, 0, 6) && optionalTime(l.start) && optionalTime(l.end) && (!l.end || (!!l.start && (l.end as string) > (l.start as string))) && textValue(l.location) && (l.timePending === undefined || textValue(l.timePending))) &&
-    (value.tasks as Record<string, unknown>[]).every(t => textValue(t.title) && courseRef(t.courseId) && ['assignment', 'project', 'exam'].includes(t.kind as string) && validDate(t.due) && ['low', 'medium', 'high'].includes(t.priority as string) && boundedNumber(t.minutes, 0, 100000) && typeof t.completed === 'boolean' && optionalTime(t.time) && optionalTime(t.endTime) && (!t.endTime || (!!t.time && (t.endTime as string) > (t.time as string))) && (t.timePending === undefined || textValue(t.timePending))) &&
-    (value.notes as Record<string, unknown>[]).every(n => textValue(n.title) && courseRef(n.courseId) && textValue(n.content) && textValue(n.summary) && typeof n.updatedAt === 'string' && !Number.isNaN(Date.parse(n.updatedAt))) &&
-    (value.transactions as Record<string, unknown>[]).every(t => textValue(t.title) && ['expense', 'income'].includes(t.kind as string) && boundedNumber(t.amount, 0.01, 1e9) && textValue(t.category) && validDate(t.date) && (t.ruleId === undefined || textValue(t.ruleId)));
-}
 
 function loadData(): { data: AppData; error: string; recoveryRaw: string | null } {
   let raw: string | null = null;
@@ -57,15 +30,23 @@ interface AppContextValue {
   data: AppData; page: Page; update: (recipe: (draft: AppData) => void) => void;
   notify: (message: string) => void; navigate: (page: Page) => void;
   replace: (data: AppData) => boolean; storageError: string; recoveryRaw: string | null;
+  back: () => void; forward: () => void; canGoBack: boolean; canGoForward: boolean; forwardPage: Page | null;
 }
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { authenticated } = useAuth();
   const [initial] = useState(loadData);
   const [data, setData] = useState<AppData>(initial.data);
+  const dataRef = useRef(data);
   const [storageError, setStorageError] = useState(initial.error);
   const [recoveryRaw, setRecoveryRaw] = useState(initial.recoveryRaw);
-  const [page, setPage] = useState<Page>('dashboard');
+  const pages: Page[] = ['dashboard', 'courses', 'plan', 'tasks', 'practice', 'logistics', 'notes', 'finance', 'profile', 'opportunities', 'settings', 'owner', 'teacher', 'updates'];
+  const pageFromUrl = (): Page => pages.includes(window.location.hash.slice(1) as Page) ? window.location.hash.slice(1) as Page : 'dashboard';
+  const [page, setPage] = useState<Page>(pageFromUrl);
+  const [navigation, setNavigation] = useState(() => ({ pages: [page] as Page[], index: 0 }));
+  const navigationRef = useRef(navigation);
+  const navigationSession = useRef(crypto.randomUUID());
   const [toast, setToast] = useState('');
   const notify = useCallback((message: string) => setToast(message), []);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); }, [toast]);
@@ -75,14 +56,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     catch { setStorageError('لم تُحفظ آخر التغييرات على الجهاز. صدّر نسخة احتياطية من الإعدادات قبل إغلاق التطبيق.'); }
   }, [recoveryRaw]);
   const update = useCallback((recipe: (draft: AppData) => void) => {
-    setData(previous => { const next = structuredClone(previous); recipe(next); persist(next); return next; });
+    const next = structuredClone(dataRef.current);
+    recipe(next); dataRef.current = next; persist(next); setData(next);
   }, [persist]);
   const replace = useCallback((next: AppData) => {
     if (!validateData(next)) return false;
-    setData(structuredClone(next)); setRecoveryRaw(null); persist(next, true); return true;
+    const value = structuredClone(next); dataRef.current = value;
+    setData(value); setRecoveryRaw(null); persist(value, true); return true;
   }, [persist]);
   useEffect(() => {
-    if (!import.meta.env.DEV || initial.error) return;
+    if (!authenticated || initial.error) return;
     try { if (localStorage.getItem(STORAGE_KEY)) return; } catch { return; }
     const controller = new AbortController();
     fetch('/__madar_profile', { signal: controller.signal }).then(async response => {
@@ -91,9 +74,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (validateData(value) && !localStorage.getItem(STORAGE_KEY)) replace(value);
     }).catch(() => { /* Optional personal profile; ordinary installations start empty. */ });
     return () => controller.abort();
-  }, [initial.error, replace]);
-  const navigate = useCallback((next: Page) => { setPage(next); window.scrollTo({ top: 0, behavior: 'smooth' }); }, []);
-  return <AppContext.Provider value={{ data, page, update, notify, navigate, replace, storageError, recoveryRaw }}>
+  }, [authenticated, initial.error, replace]);
+  useEffect(() => {
+    const current = navigationRef.current;
+    window.history.replaceState({ madarSession: navigationSession.current, index: current.index }, '', `#${current.pages[current.index]}`);
+    const onPop = (event: PopStateEvent) => {
+      const state = event.state;
+      const route = pageFromUrl();
+      const current = navigationRef.current;
+      const index = state?.madarSession === navigationSession.current && Number.isInteger(state.index) && current.pages[state.index] === route ? state.index : -1;
+      const next = index >= 0 ? { ...current, index } : { pages: [route], index: 0 };
+      navigationRef.current = next; setNavigation(next); setPage(route);
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const navigate = useCallback((next: Page) => {
+    const previous = navigationRef.current;
+    if (previous.pages[previous.index] !== next) {
+      const current = { pages: [...previous.pages.slice(0, previous.index + 1), next], index: previous.index + 1 };
+      navigationRef.current = current; setNavigation(current); setPage(next);
+      window.history.pushState({ madarSession: navigationSession.current, index: current.index }, '', `#${next}`);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+  const back = useCallback(() => { if (navigationRef.current.index > 0) window.history.back(); }, []);
+  const forward = useCallback(() => { if (navigationRef.current.index < navigationRef.current.pages.length - 1) window.history.forward(); }, []);
+  return <AppContext.Provider value={{ data, page, update, notify, navigate, replace, storageError, recoveryRaw, back, forward, canGoBack: navigation.index > 0, canGoForward: navigation.index < navigation.pages.length - 1, forwardPage: navigation.pages[navigation.index + 1] ?? null }}>
     {children}
     {toast && <div className="toast" role="status">{toast}</div>}
   </AppContext.Provider>;

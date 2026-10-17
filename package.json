@@ -3,12 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
+  "engines": { "node": ">=24.0.0" },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 0.0.0.0",
-    "test": "node --experimental-strip-types --test tests/logic.test.ts",
+    "preview": "node --experimental-strip-types server/index.mjs",
+    "start": "node --experimental-strip-types server/index.mjs",
+    "owner:init": "node --experimental-strip-types server/initialize-owner.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
     "test:browser": "python3 tests/browser_smoke.py"
   },
   "dependencies": {

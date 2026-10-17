@@ -25,7 +25,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     const oldOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const focusable = () => Array.from(ref.current?.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex="0"]') ?? []).filter(el => !el.hasAttribute('disabled'));
-    focusable()[1]?.focus();
+    focusable()[1]?.focus({ preventScroll: true });
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCloseRef.current();
       if (event.key === 'Tab') {

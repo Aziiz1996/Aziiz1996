@@ -24,7 +24,7 @@ export default function SettingsPage() {
   function save(event: FormEvent) {
     event.preventDefault();
     if (!validUniversityUrl(form.universityUrl ?? '')) { setFormError('أدخل رابطاً صحيحاً يبدأ بـ https:// لبوابة الجامعة.'); return; }
-    setFormError(''); update(d => { d.settings = form; }); notify('حُفظت تفضيلاتك وتحدّثت خطة المذاكرة');
+    setFormError(''); update(d => { d.settings = form; if (d.studentProfile) { d.studentProfile.fullName = form.name; d.studentProfile.university = form.universityName ?? ''; } }); notify('حُفظت تفضيلاتك وتحدّثت خطة المذاكرة');
   }
   async function importBackup(file: File | undefined) {
     if (!file) return;
@@ -36,7 +36,7 @@ export default function SettingsPage() {
       notify('استُعيدت بياناتك بنجاح'); navigate('dashboard');
     } catch (error) { setImportError(error instanceof Error ? error.message : 'تعذّر استيراد النسخة الاحتياطية.'); }
   }
-  const hasData = data.courses.length + data.tasks.length + data.notes.length + data.transactions.length + (data.incomeRules?.length ?? 0) > 0 || JSON.stringify(data.settings) !== JSON.stringify(emptyData().settings) || recoveryRaw !== null;
+  const hasData = data.courses.length + data.tasks.length + data.notes.length + data.transactions.length + (data.incomeRules?.length ?? 0) + (data.opportunityLinks?.length ?? 0) + (data.applications?.length ?? 0) + (data.studyLog?.length ?? 0) + (data.practiceAttempts?.length ?? 0) > 0 || !!data.studentProfile || !!data.activeStudy || !!data.activePractice || JSON.stringify(data.settings) !== JSON.stringify(emptyData().settings) || recoveryRaw !== null;
   return <>
     <SectionHeader eyebrow="على طريقتك" title="إعدادات مساحتك" description="حدد وقتك وميزانيتك، واحتفظ بنسخة من تفاصيلك." />
     {recoveryRaw !== null && <div className="notice notice-warning"><div><strong>نسختك الأصلية تحتاج استعادة</strong><p>احتفظ بها أولاً. لم نستبدلها بالتغييرات المؤقتة؛ استورد نسخة صالحة أو أكد حذف البيانات لبدء نسخة جديدة.</p></div><button className="btn btn-secondary" onClick={() => downloadFile(`madar-recovery-${todayISO()}.json`, recoveryRaw, 'application/json')}><Download size={18} /> تصدير النسخة الأصلية</button></div>}

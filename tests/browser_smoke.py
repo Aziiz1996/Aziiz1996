@@ -22,6 +22,7 @@ def data(page):
 
 def seed(page, value):
     page.evaluate('([key,value]) => localStorage.setItem(key, JSON.stringify(value))', [KEY, value])
+    page.goto(BASE.rstrip('/') + '/#dashboard')
     page.reload()
     expect(page.locator('.welcome-card')).to_be_visible()
 
@@ -450,6 +451,8 @@ with sync_playwright() as p:
         fp.on('pageerror',lambda error:console_errors.append(str(error)))
         pending=[]
         ready={'response':False}
+        # Private profile hydration now requires a verified owner session.
+        fp.route('**/api/session', lambda route: route.fulfill(status=200, content_type='application/json', body=json.dumps({'authenticated':True,'username':'qa-owner','role':'owner','csrfToken':'synthetic-test-token'})))
         def intercept_profile(route):
             if ready['response']:
                 route.fulfill(status=200,content_type='application/json',body=json.dumps(fixture))

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "مدار · تعبئة بيانات التقديم",
+  "version": "1.0.0",
+  "description": "استورد ملفك من مدار وعبّئ حقول التقديم في الصفحة الحالية بعد طلبك، ثم راجع وأرسل بنفسك.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_title": "مدار · بيانات التقديم",
+    "default_popup": "popup.html"
+  }
+}

@@ -8,9 +8,11 @@ export function demoData(): AppData {
   data.demo = true;
   data.settings = { ...data.settings, name: 'طالب', monthlyBudget: 1500, dailyMinutes: 120 };
   data.courses = [
-    { id: 'course-1', name: 'مبادئ البرمجة', color: '#6b4fe0' },
-    { id: 'course-2', name: 'الرياضيات', color: '#2a9b8f' },
-    { id: 'course-3', name: 'اللغة الإنجليزية', color: '#e99854' },
+    { id: 'course-1', name: 'إدارة المخزون والمخازن', color: '#6b4fe0' },
+    { id: 'course-2', name: 'إدارة المشتريات والعقود والمناقصات', color: '#2a9b8f' },
+    { id: 'course-3', name: 'إدارة النقل والشحن الدولي', color: '#e99854' },
+    { id: 'course-4', name: 'مبادئ إدارة الأعمال', color: '#d67591' },
+    { id: 'course-5', name: 'مقدمة في إدارة سلاسل الإمداد', color: '#588ec5' },
   ];
   const day = new Date(today + 'T12:00:00').getDay();
   data.lectures = [
@@ -20,12 +22,12 @@ export function demoData(): AppData {
   ];
   data.tasks = [
     { id: 'task-1', title: 'مراجعة الفصل الأول', courseId: 'course-1', kind: 'exam', due: addDays(today, 4), priority: 'high', minutes: 240, completed: false },
-    { id: 'task-2', title: 'حل ورقة التمارين', courseId: 'course-2', kind: 'assignment', due: addDays(today, 2), priority: 'high', minutes: 90, completed: false },
-    { id: 'task-3', title: 'مشروع آلة حاسبة', courseId: 'course-1', kind: 'project', due: addDays(today, 9), priority: 'medium', minutes: 300, completed: false },
-    { id: 'task-4', title: 'قراءة الوحدة الثانية', courseId: 'course-3', kind: 'assignment', due: addDays(today, 5), priority: 'medium', minutes: 60, completed: false },
+    { id: 'task-2', title: 'مراجعة دورة الشراء', courseId: 'course-2', kind: 'assignment', due: addDays(today, 2), priority: 'high', minutes: 90, completed: false },
+    { id: 'task-3', title: 'مشروع تحسين دقة المخزون', courseId: 'course-1', kind: 'project', due: addDays(today, 9), priority: 'medium', minutes: 300, completed: false },
+    { id: 'task-4', title: 'مقارنة وسائل الشحن', courseId: 'course-3', kind: 'assignment', due: addDays(today, 5), priority: 'medium', minutes: 60, completed: false },
     { id: 'task-5', title: 'ترتيب ملاحظات الأسبوع', courseId: '', kind: 'assignment', due: today, priority: 'low', minutes: 30, completed: true },
   ];
-  data.notes = [{ id: 'note-1', title: 'المتغيرات وأنواع البيانات', courseId: 'course-1', content: 'المتغير مساحة في الذاكرة نخزن فيها قيمة يمكن تغييرها أثناء تنفيذ البرنامج. يساعد اسم المتغير الواضح في فهم الغرض منه. تشمل أنواع البيانات الشائعة الأعداد والنصوص والقيم المنطقية. نختار نوع البيانات بحسب طبيعة القيمة والعمليات المطلوبة. يجب تهيئة المتغير قبل استخدامه لتجنب النتائج غير المتوقعة.', summary: '• المتغير مساحة في الذاكرة نخزن فيها قيمة يمكن تغييرها أثناء تنفيذ البرنامج.\n• تشمل أنواع البيانات الشائعة الأعداد والنصوص والقيم المنطقية.\n• يجب تهيئة المتغير قبل استخدامه لتجنب النتائج غير المتوقعة.', updatedAt: new Date().toISOString() }];
+  data.notes = [{ id: 'note-1', title: 'مراجعة معنى WMS', courseId: 'course-1', content: 'WMS اختصار Warehouse Management System ويعني نظام إدارة المستودعات. ويختلف عن TMS الذي يعني نظام إدارة النقل. SCM يعني إدارة سلسلة الإمداد. هذه ملاحظة تجريبية من دليل المصطلحات وليست نص محاضرة.', summary: '• WMS: نظام إدارة المستودعات.\n• TMS: نظام إدارة النقل.\n• SCM: إدارة سلسلة الإمداد.', updatedAt: new Date().toISOString() }];
   data.transactions = [
     { id: 'transaction-1', title: 'المكافأة الجامعية', kind: 'income', amount: 1000, category: 'مكافأة', date: today },
     { id: 'transaction-2', title: 'كتب ومستلزمات', kind: 'expense', amount: 180, category: 'دراسة', date: today },

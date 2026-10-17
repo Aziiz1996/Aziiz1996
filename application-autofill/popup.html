@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>مدار · بيانات التقديم</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main>
+      <header><span class="brand" aria-hidden="true">م</span><div><h1>التقديم مع مدار</h1><p>خطوة اليوم تصنع غداً أجمل</p></div></header>
+      <p>حمّل ملف بيانات التقديم من صفحة الفرص في مدار، ثم استورده هنا. افتح نموذج الوظيفة أو الدورة واضغط تعبئة.</p>
+      <label class="file-label" for="profile-file">استيراد بيانات التقديم (JSON)</label>
+      <input id="profile-file" type="file" accept=".json,application/json">
+      <section id="profile-info" aria-label="البيانات المحفوظة" hidden>
+        <strong id="profile-name"></strong>
+        <p id="profile-cv"></p>
+      </section>
+      <button id="fill" type="button" disabled>تعبئة الصفحة الحالية</button>
+      <button id="clear" class="secondary" type="button" disabled>حذف البيانات من الإضافة</button>
+      <p id="status" role="status" aria-live="polite"></p>
+      <p class="notice">راجع القيم والملف في الموقع قبل الإرسال. لا تضغط الإضافة أزرار التسجيل أو التقديم، ولا تعبّئ كلمات المرور أو الموافقات.</p>
+      <footer>Chrome وEdge على الكمبيوتر. تحفظ البيانات محلياً في الإضافة حتى تحذفها؛ لا ترفعها الإضافة إلى أي خدمة. لا تستورد بياناتك على جهاز مشترك.</footer>
+    </main>
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>

@@ -1,21 +1,21 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { createOwnerMiddleware } from './server/owner.mjs';
 
 export default defineConfig({
   plugins: [react(), {
-    name: 'madar-personal-bootstrap',
+    name: 'madar-owner-service',
     apply: 'serve',
-    configureServer(server) {
-      server.middlewares.use('/__madar_profile', async (request, response) => {
-        response.setHeader('Content-Type', 'application/json; charset=utf-8');
-        response.setHeader('Cache-Control', 'no-store');
-        if (request.method !== 'GET') { response.statusCode = 405; response.end('{}'); return; }
-        try { response.end(await readFile(resolve(server.config.root, '.madar/profile.json'), 'utf8')); }
-        catch { response.statusCode = 404; response.end('{}'); }
-      });
+    async configureServer(server) {
+      server.middlewares.use(await createOwnerMiddleware({
+        root: server.config.root,
+        publicOrigin: process.env.MADAR_PUBLIC_ORIGIN,
+        secureCookies: process.env.MADAR_SECURE_COOKIES === '1' ? true : undefined,
+      }));
     },
   }],
+  server: {
+    fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.madar/**'] },
+  },
   base: './',
 });
