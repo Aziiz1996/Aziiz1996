@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -9,8 +9,11 @@ import { emptyData } from '../src/validation.ts';
 
 test('account isolation, signout, owner files, origin checks, and password hashing', async () => {
  const directory = mkdtempSync(join(tmpdir(), 'leader-account-test-'));
+ const fixtureRoot = join(directory, 'static');
+ mkdirSync(join(fixtureRoot, 'personal-lessons'), { recursive:true });
+ writeFileSync(join(fixtureRoot, 'personal-lessons', 'index.json'), JSON.stringify({ lessons:[{ title:'Synthetic private lesson' }] }));
  const port = 31479; const base = 'http://127.0.0.1:' + port;
- const processHandle = spawn(process.execPath, ['--experimental-strip-types', 'server/index.mjs'], { env: { ...process.env, OPENAI_API_KEY:'', PORT: String(port), LEADER_DATA_DIR: directory, LEADER_OWNER_SETUP_KEY: 'synthetic-owner-setup-key', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'] });
+ const processHandle = spawn(process.execPath, ['--experimental-strip-types', 'server/index.mjs'], { env: { ...process.env, OPENAI_API_KEY:'', PORT: String(port), LEADER_DATA_DIR: directory, LEADER_STATIC_DIR:fixtureRoot, LEADER_OWNER_SETUP_KEY: 'synthetic-owner-setup-key', NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'] });
  try {
   await Promise.race([once(processHandle.stdout, 'data'), once(processHandle, 'exit').then(() => { throw new Error('Server failed'); }), new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Startup timeout')), 10000); timer.unref(); })]);
   async function request(path, { method='GET', cookie='', value, origin=base, account } = {}) {
@@ -28,6 +31,16 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   assert.match(owner.response.headers.get('set-cookie'), /HttpOnly/);
   const member = await request('/api/auth/register', { method:'POST', value:{ username:'member@example.com', password:'synthetic-password-two' } });
   assert.equal(member.response.status,200); assert.equal(member.json.user.owner,false);
+  assert.equal(member.json.data.lectures.length, 5);
+  assert.equal(member.json.data.notes.length, 5);
+  assert.deepEqual(member.json.data.notes.map(n => n.id), owner.json.data.notes.map(n => n.id));
+  const personal = member.json.data; personal.notes[0].summary = 'Member private edit';
+  personal.notes.push({ id:'private-member-note', courseId:'', title:'Private', content:'Secret', summary:'Secret', updatedAt:new Date().toISOString() });
+  assert.equal((await request('/api/data', { method:'PUT', cookie:member.cookie, account:member.json.user.id, value:personal })).response.status,200);
+  const refreshed = await request('/api/auth/session', { cookie:member.cookie });
+  assert.equal(refreshed.json.data.notes.length, 6);
+  assert.equal(refreshed.json.data.notes[0].summary, 'Member private edit');
+  assert.equal((await request('/api/auth/session', { cookie:owner.cookie })).json.data.notes.length, 5);
   assert.equal((await request('/api/auth/claim-owner', { method:'POST', cookie:member.cookie })).response.status,409);
   const data = emptyData(); data.settings.name = 'Private owner data';
   const save = await request('/api/data', { method:'PUT', cookie:owner.cookie, value:data, account:owner.json.user.id });
@@ -41,6 +54,16 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   assert.equal((await request('/personal-lessons/index.json', { cookie:member.cookie })).response.status,404);
   assert.equal((await request('/personal-lessons/index.json')).response.status,404);
   assert.equal((await request('/personal-lessons/index.json', { cookie:owner.cookie })).response.status,200);
+  for (const path of ['/personal-lessons%2findex.json', '/%70ersonal-lessons/index.json', '/PERSONAL-LESSONS/index.json', '/%2fpersonal-lessons/index.json']) {
+   assert.equal((await request(path, { cookie:member.cookie })).response.status,404);
+   assert.equal((await request(path)).response.status,404);
+  }
+  const legacy = emptyData(); legacy.notes.push({ id:'legacy-private', courseId:'', title:'Legacy', content:'Personal text', summary:'', updatedAt:new Date().toISOString() });
+  assert.equal((await request('/api/data', { method:'PUT', cookie:member.cookie, account:member.json.user.id, value:legacy })).response.status,200);
+  const migrated = await request('/api/auth/session', { cookie:member.cookie });
+  assert.equal(migrated.json.data.notes.length,6);
+  assert.equal(migrated.json.data.notes[0].content,'Personal text');
+  assert.equal(migrated.json.data.lectures.length,5);
   assert.equal((await request('/api/auth/login', { method:'POST', value:{ username:'owner@example.com', password:'incorrect-password' } })).response.status,401);
   const logout = await request('/api/auth/logout', { method:'POST', cookie:owner.cookie }); assert.equal(logout.response.status,200);
   assert.equal((await request('/api/auth/session', { cookie:owner.cookie })).response.status,401);

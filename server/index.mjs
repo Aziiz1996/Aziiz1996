@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, randomUUID, createHash, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
-import { resolve, extname } from 'node:path';
+import { resolve, extname, sep } from 'node:path';
 import { emptyData, validateData } from '../src/validation.ts';
 import { LOGISTICS_LESSONS } from '../src/logisticsContent.ts';
 import { connectMoodle, syncMoodle } from './moodle.mjs';
@@ -14,7 +14,7 @@ const dataDir = resolve(process.env.LEADER_DATA_DIR || '.leader-data');
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const db = new DatabaseSync(resolve(dataDir, 'leader.sqlite'));
 db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, owner INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS course_summaries (user_id TEXT NOT NULL, course_id TEXT NOT NULL, summary_json TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(user_id, course_id));');
-const staticRoot = resolve('dist');
+const staticRoot = resolve(process.env.LEADER_STATIC_DIR || 'dist');
 const attempts = new Map();
 const moodleConnections = new Map();
 const moodleAttempts = new Map();
@@ -28,14 +28,14 @@ function current(req) {
  if (!token) return null;
  return db.prepare('SELECT users.* FROM sessions JOIN users ON sessions.user_id=users.id WHERE sessions.hash=? AND sessions.expires>?').get(hash(token), Date.now()) || null;
 }
-function withOwnerContent(user) {
- if (!user?.owner) return user;
+function withSharedContent(user) {
+ if (!user) return user;
  const data = JSON.parse(user.data);
  const before = JSON.stringify(data);
  const courseId = 'inventory-management';
  if (!data.courses.some(course => course.id === courseId)) data.courses.push({ id: courseId, name: 'إدارة المخزون والمخازن', color: '#7c3aed' });
  LOGISTICS_LESSONS.forEach((lesson, index) => {
-  if (!data.lectures.some(lecture => lecture.id === lesson.id)) data.lectures.push({ id: lesson.id, courseId, day: index, start: '', end: '', location: lesson.title, timePending: 'حددي الموعد ورابط الحضور من منصة مودل' });
+  if (!data.lectures.some(lecture => lecture.id === lesson.id)) data.lectures.push({ id: lesson.id, courseId, day: index, start: '', end: '', location: lesson.title, timePending: 'حدّد الموعد ورابط الحضور من منصة مودل' });
   if (!data.notes.some(note => note.id === lesson.id)) data.notes.push({ id: lesson.id, courseId, title: lesson.title, content: lesson.summary, summary: lesson.summary, updatedAt: new Date().toISOString() });
  });
  const serialized = JSON.stringify(data);
@@ -70,7 +70,7 @@ async function body(req) {
  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 function session(res, user) {
- user = withOwnerContent(user);
+ user = withSharedContent(user);
  db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
  const token = randomBytes(32).toString('hex');
  db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token), user.id, expiry());
@@ -127,7 +127,7 @@ const server = http.createServer(async (req, res) => {
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
    if (path === '/api/auth/session' && req.method === 'GET') {
-    const hydrated = withOwnerContent(user);
+    const hydrated = withSharedContent(user);
     return json(res, 200, { user: { id: hydrated.id, username: hydrated.username, owner: !!hydrated.owner }, data: JSON.parse(hydrated.data) });
    }
    if (path === '/api/auth/logout' && req.method === 'POST') {
@@ -151,7 +151,7 @@ const server = http.createServer(async (req, res) => {
    }
    if (path === '/api/auth/claim-owner' && req.method === 'POST') {
     const existingOwner = db.prepare('SELECT id FROM users WHERE owner=1').get();
-    if (existingOwner && existingOwner.id !== user.id) return json(res, 409, { error: 'تم تفعيل حساب رئيسة التشغيل مسبقاً.' });
+    if (existingOwner && existingOwner.id !== user.id) return json(res, 409, { error: 'تم تفعيل حساب مدير التطبيق مسبقاً.' });
     db.prepare('UPDATE users SET owner=1 WHERE id=?').run(user.id);
     return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
    }
@@ -216,16 +216,19 @@ const server = http.createServer(async (req, res) => {
    return json(res, 404, { error: 'المسار غير موجود.' });
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'طريقة الطلب غير متاحة.' });
-  if (path.startsWith('/personal-lessons/')) {
+  const decodedPath = decodeURIComponent(path);
+  if (decodedPath.includes('\\') || decodedPath.split('/').some(part => part === '.' || part === '..')) return json(res, 404, { error: 'غير موجود.' });
+  const privateLesson = decodedPath.replace(/\/+/g, '/').toLowerCase().startsWith('/personal-lessons/');
+  if (privateLesson) {
    const user = current(req);
    if (!user?.owner) return json(res, 404, { error: 'الملف غير متاح لهذا الحساب.' });
    res.setHeader('Cache-Control', 'private, no-store');
   }
   const file = resolve(staticRoot, '.' + decodeURIComponent(path === '/' ? '/index.html' : path));
-  if (!file.startsWith(staticRoot + '/')) return json(res, 404, { error: 'غير موجود.' });
+  if (!file.startsWith(staticRoot + sep)) return json(res, 404, { error: 'غير موجود.' });
   let content; try { if (!statSync(file).isFile()) throw new Error(); content = readFileSync(file); } catch { return json(res, 404, { error: 'الملف غير موجود.' }); }
   const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.svg':'image/svg+xml', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.pdf':'application/pdf' };
-  if (!path.startsWith('/personal-lessons/')) res.setHeader('Cache-Control', path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+  if (!privateLesson) res.setHeader('Cache-Control', path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
   res.setHeader('Content-Type', types[extname(file)] || 'application/octet-stream'); res.writeHead(200); res.end(req.method === 'HEAD' ? undefined : content);
  } catch (error) { json(res, 400, { error: error.message === 'body-size' ? 'البيانات أكبر من الحد المسموح.' : 'تعذّر تنفيذ الطلب.' }); }
 });
