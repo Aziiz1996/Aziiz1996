@@ -28,8 +28,8 @@ function current(req) {
  if (!token) return null;
  return db.prepare('SELECT users.* FROM sessions JOIN users ON sessions.user_id=users.id WHERE sessions.hash=? AND sessions.expires>?').get(hash(token), Date.now()) || null;
 }
-function withOwnerContent(user) {
- if (!user?.owner) return user;
+function withSharedContent(user) {
+ if (!user) return user;
  const data = JSON.parse(user.data);
  const before = JSON.stringify(data);
  const courseId = 'inventory-management';
@@ -70,7 +70,7 @@ async function body(req) {
  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 function session(res, user) {
- user = withOwnerContent(user);
+ user = withSharedContent(user);
  db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
  const token = randomBytes(32).toString('hex');
  db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token), user.id, expiry());
@@ -127,7 +127,7 @@ const server = http.createServer(async (req, res) => {
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
    if (path === '/api/auth/session' && req.method === 'GET') {
-    const hydrated = withOwnerContent(user);
+    const hydrated = withSharedContent(user);
     return json(res, 200, { user: { id: hydrated.id, username: hydrated.username, owner: !!hydrated.owner }, data: JSON.parse(hydrated.data) });
    }
    if (path === '/api/auth/logout' && req.method === 'POST') {
@@ -151,7 +151,7 @@ const server = http.createServer(async (req, res) => {
    }
    if (path === '/api/auth/claim-owner' && req.method === 'POST') {
     const existingOwner = db.prepare('SELECT id FROM users WHERE owner=1').get();
-    if (existingOwner && existingOwner.id !== user.id) return json(res, 409, { error: 'تم تفعيل حساب رئيسة التشغيل مسبقاً.' });
+    if (existingOwner && existingOwner.id !== user.id) return json(res, 409, { error: 'تم تفعيل حساب مدير التطبيق مسبقاً.' });
     db.prepare('UPDATE users SET owner=1 WHERE id=?').run(user.id);
     return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
    }
