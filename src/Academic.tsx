@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AlertCircle, BookOpen, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, GraduationCap, ListChecks, MapPin, Pencil, Play, Plus, Settings2, Sparkles, Trash2 } from 'lucide-react';
 import NotesPage from './Notes';
 import StudyCoach from './StudyCoach';
+import SharedSchedule from './SharedSchedule';
 import { allocateStudySeconds, studyPhases } from './studyMethods';
 import { useApp, validUniversityUrl } from './store';
 import { CourseBadge, EmptyState, Field, Modal, SectionHeader } from './ui';
@@ -144,6 +145,7 @@ export function CoursesPage() {
   return <div className="page-content">
     {summaryCourse && <Modal title="ملخصات المادة" onClose={() => setSummaryCourse(null)}><NotesPage key={summaryCourse} initialCourseId={summaryCourse} /></Modal>}
     <SectionHeader eyebrow="كل مادة لها مكان" title="المواد والمحاضرات" description="اجمع موادك ومواعيدك، واستعد لأسبوع واضح." action={<button className="btn btn-primary" onClick={() => setCourseForm('new')}><Plus size={18} />إضافة مادة</button>} />
+    <SharedSchedule />
     {data.courses.length === 0 ? <EmptyState icon={GraduationCap} title="ابدأ بمادتك الأولى" description="أضف المواد التي تدرسها هذا الفصل، ثم سجّل مواعيد المحاضرات." action={<button className="btn btn-primary" onClick={() => setCourseForm('new')}><Plus size={18} />إضافة مادة</button>} /> : <>
       <div className="course-grid">{data.courses.map(course => {
         const courseLectures = data.lectures.filter(item => item.courseId === course.id);

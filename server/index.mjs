@@ -9,6 +9,8 @@ import { emptyData, validateData } from '../src/validation.ts';
 import { mergeStudyMaterials } from '../src/studyMaterials.ts';
 import { PROVIDED_MATERIALS } from '../src/providedMaterials.ts';
 import { LOGISTICS_LESSONS } from '../src/logisticsContent.ts';
+import { mergeSharedAcademics, SHARED_ACADEMIC_CATALOG } from '../src/sharedAcademics.ts';
+import { isLessonTemplate } from '../src/logic.ts';
 import { connectMoodle, syncMoodle } from './moodle.mjs';
 import { generateAcademicSummary } from './openai.mjs';
 import { createOwnerDesignService } from './owner-design.mjs';
@@ -39,15 +41,22 @@ function withSharedContent(user) {
  if (!user) return user;
  const data = JSON.parse(user.data);
  const before = JSON.stringify(data);
- const courseId = 'inventory-management';
- if (!data.courses.some(course => course.id === courseId)) data.courses.push({ id: courseId, name: 'إدارة المخزون والمخازن', color: '#7c3aed' });
- LOGISTICS_LESSONS.forEach((lesson, index) => {
-  if (!data.lectures.some(lecture => lecture.id === lesson.id)) data.lectures.push({ id: lesson.id, courseId, day: index, start: '', end: '', location: lesson.title, timePending: 'حدّد الموعد ورابط الحضور من منصة مودل' });
-  if (!data.notes.some(note => note.id === lesson.id)) data.notes.push({ id: lesson.id, courseId, title: lesson.title, content: lesson.summary, summary: lesson.summary, updatedAt: new Date().toISOString() });
- });
+ if (!validateData(data)) return user;
+ // Reading resources previously had blank weekday placeholders. Keep actual student appointments.
+ data.lectures = data.lectures.filter(lecture => !isLessonTemplate(lecture));
  let sharedData = data;
- // A full personal account must remain accessible even if it cannot accept more notes.
- try { sharedData = mergeStudyMaterials(data, PROVIDED_MATERIALS).data; } catch {}
+ // Each addition is atomic; an account at capacity remains accessible with its valid personal data.
+ try { sharedData = mergeSharedAcademics(sharedData).data; } catch {}
+ const courseId = sharedData.courses.find(course => course.id === 'inventory-management' || course.id === 'inventory')?.id
+  ?? sharedData.courses.find(course => course.name.normalize('NFKC').replace(/[إأآ]/g, 'ا').replace(/[\u064B-\u065Fـ]/g, '').includes('ادارة المخزون والمخازن'))?.id;
+ if (courseId) {
+  const reviews = structuredClone(sharedData);
+  for (const lesson of LOGISTICS_LESSONS) {
+   if (!reviews.notes.some(note => note.id === lesson.id)) reviews.notes.push({ id: lesson.id, courseId, title: lesson.title, content: lesson.summary, summary: lesson.summary, updatedAt: new Date().toISOString() });
+  }
+  if (validateData(reviews)) sharedData = reviews;
+ }
+ try { sharedData = mergeStudyMaterials(sharedData, PROVIDED_MATERIALS).data; } catch {}
  const serialized = JSON.stringify(sharedData);
  if (serialized !== before) db.prepare('UPDATE users SET data=? WHERE id=?').run(serialized, user.id);
  return { ...user, data: serialized };
@@ -175,6 +184,7 @@ const server = http.createServer(async (req, res) => {
    }
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
+   if (path === '/api/academic/shared' && req.method === 'GET') return json(res, 200, { catalog:SHARED_ACADEMIC_CATALOG, materials:PROVIDED_MATERIALS, reviewLessons:LOGISTICS_LESSONS });
    if (path === '/api/news' && req.method === 'GET' && await handleNewsRequest(req, res)) return;
    if (path === '/api/design' && req.method === 'GET') return json(res, 200, ownerDesign.getDesign());
    if (path.startsWith('/api/owner/')) {
@@ -335,4 +345,9 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', types[extname(file)] || 'application/octet-stream'); res.writeHead(200); res.end(req.method === 'HEAD' ? undefined : content);
  } catch (error) { json(res, error.message === 'body-size' ? 413 : 400, { error: error.message === 'body-size' ? 'البيانات أكبر من الحد المسموح: ١٠ ميغابايت.' : 'تعذّر تنفيذ الطلب.' }); }
 });
+// Existing accounts receive the same approved catalog without waiting for another login.
+for (const user of db.prepare('SELECT * FROM users').all()) {
+ try { withSharedContent(user); }
+ catch { console.warn('Shared academic content could not be added to a saved account; its original data was kept.'); }
+}
 server.listen(Number(process.env.PORT || 3001), process.env.LEADER_BIND_HOST || '127.0.0.1', () => console.log('Leader server is ready.'));

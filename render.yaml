@@ -1,23 +1,23 @@
 services:
   - type: web
     name: aziz-leader
-    runtime: node
+    runtime: docker
     plan: starter
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /
     disk:
       name: leader-accounts
       mountPath: /var/data
       sizeGB: 1
     envVars:
-      - key: NODE_VERSION
-        value: 24
       - key: NODE_ENV
         value: production
       - key: LEADER_BIND_HOST
         value: 0.0.0.0
       - key: LEADER_DATA_DIR
         value: /var/data/leader
+      - key: LEADER_OWNER_EMAIL
+        sync: false
       - key: LEADER_OWNER_SETUP_KEY
         generateValue: true
