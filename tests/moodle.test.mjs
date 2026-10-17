@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeMoodleData } from '../server/moodle.mjs';
+import { normalizeMoodleData, normalizeCourseResources } from '../server/moodle.mjs';
 
 test('Moodle courses and upcoming events are normalized for the study dashboard', () => {
   const timestamp = Math.floor(Date.parse('2026-10-11T09:30:00Z') / 1000);
@@ -33,4 +33,18 @@ test('Moodle normalization rejects unsafe links and malformed events', () => {
   assert.equal(result.events.length, 1);
   assert.equal(result.events[0].url, undefined);
   assert.equal(result.events[0].kind, 'event');
+});
+
+test('course resources preserve student links and reject hidden content and credentials', () => {
+ const resources=normalizeCourseResources([{ name:'Week 1', modules:[
+ { id:1,name:'حضور المحاضرة',modname:'url',url:'https://college.example/mod/url/view.php?id=1' },
+ { id:2,name:'ملف',modname:'resource',url:'https://college.example/mod/resource/view.php?id=2' },
+ { id:3,name:'hidden',visible:0,url:'https://college.example/private' },
+ { id:4,name:'token',url:'https://college.example/file?wstoken=private' },
+ { id:5,name:'unsafe',url:'javascript:alert(1)' },
+ { id:6,name:'login',url:'https://user:password@college.example/file' }
+ ] }]);
+ assert.equal(resources.length,2); assert.equal(resources[0].kind,'attendance'); assert.equal(resources[1].kind,'file');
+ assert.equal(resources[0].section,'Week 1');
+ assert.deepEqual(normalizeCourseResources([{visible:0,modules:[{id:1,url:'https://college.example/file'}]}]),[]);
 });

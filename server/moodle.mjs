@@ -42,18 +42,35 @@ export function normalizeMoodleData(site, courses, upcoming) {
     const duration = Math.max(0, Number(event.timeduration || 0));
     const end = duration ? riyadhParts(stamp + duration) : null;
     const title = clean(event.name || event.activityname || 'موعد مودل');
-    const lower = title.toLocaleLowerCase('ar');
+    const lower = title.toLocaleLowerCase('ar').replace(/[إأآ]/g, 'ا');
     const kind = /اختبار|exam|quiz|midterm|final/.test(lower) ? 'exam' : /واجب|تكليف|assignment|due/.test(lower) ? 'assignment' : /محاضرة|lecture|class|جلسة/.test(lower) ? 'lecture' : 'event';
     return [{ id:`moodle-api-${event.id || `${stamp}-${title}`}`.slice(0, 145), moodleId:Number(event.id || 0), title, date:`${start.year}-${start.month}-${start.day}`, time:`${start.hour}:${start.minute}`, endDate:end ? `${end.year}-${end.month}-${end.day}` : undefined, endTime:end ? `${end.hour}:${end.minute}` : undefined, kind, description:clean(event.description || event.formattedtime || ''), url:safeUrl(event.url || event.viewurl), courseId:event.courseid ? `moodle-course-${event.courseid}` : undefined }];
   });
   return { siteName:clean(site?.sitename), fullName:clean(site?.fullname), userId:Number(site?.userid), courses:normalizedCourses, events };
 }
 
+export function normalizeCourseResources(sections) {
+ return (Array.isArray(sections) ? sections : []).filter(s => s.visible !== 0 && s.uservisible !== false).flatMap(section => (section.modules || []).filter(m => m.visible !== 0 && m.uservisible !== false).flatMap(module => {
+  const url = safeUrl(module.url); if (!url) return [];
+  const parsed = new URL(url); if (parsed.username || parsed.password || [...parsed.searchParams.keys()].some(k => /token|password|sesskey|secret/i.test(k))) return [];
+  const title = clean(module.name); const kind = module.modname === 'resource' || module.modname === 'folder' ? 'file' : /حضور|live|teams/i.test(title) ? 'attendance' : /تسجيل|مسجل|record/i.test(title) ? 'recording' : module.modname || 'url';
+  return [{ id:'moodle-resource-' + module.id, title, url, kind, section:clean(section.name) }];
+ })).slice(0,1000);
+}
+
 export async function syncMoodle(token) {
   const site = await call(token, 'core_webservice_get_site_info');
   const courses = await call(token, 'core_enrol_get_users_courses', { userid:String(site.userid) });
+  const warnings = [];
+  const contents = new Map();
+  for (const course of courses) {
+   try { contents.set(Number(course.id), normalizeCourseResources(await call(token, 'core_course_get_contents', { courseid:String(course.id) }))); }
+   catch { warnings.push('لم تكتمل قراءة ملفات وروابط مادة: ' + clean(course.fullname || course.shortname)); }
+  }
   let upcoming;
-  try { upcoming = await call(token, 'core_calendar_get_calendar_upcoming_view', { courseid:'0', categoryid:'0' }); }
-  catch { upcoming = await call(token, 'core_calendar_get_calendar_events', { 'options[userevents]':'1', 'options[siteevents]':'1', 'options[timestart]':String(Math.floor(Date.now() / 1000)), 'options[timeend]':String(Math.floor(Date.now() / 1000) + 180 * 86400) }); }
-  return normalizeMoodleData(site, courses, upcoming);
+  try { upcoming = await call(token, 'core_calendar_get_calendar_events', { ...Object.fromEntries(courses.map((c,i) => ['events[courseids]['+i+']',String(c.id)])), 'options[userevents]':'1', 'options[siteevents]':'1', 'options[timestart]':String(Math.floor(Date.now() / 1000) - 30 * 86400), 'options[timeend]':String(Math.floor(Date.now() / 1000) + 365 * 86400) }); }
+  catch { upcoming = await call(token, 'core_calendar_get_calendar_upcoming_view', { courseid:'0', categoryid:'0' }); warnings.push('تعذر جلب التقويم الكامل؛ المعروض هو المواعيد القريبة التي أتاحتها الكلية.'); }
+  const result = normalizeMoodleData(site, courses, upcoming);
+  for (const c of result.courses) if (contents.has(c.moodleId)) c.resources = contents.get(c.moodleId);
+  return { ...result, warnings };
 }

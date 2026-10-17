@@ -14,6 +14,7 @@ const dataDir = resolve(process.env.LEADER_DATA_DIR || '.leader-data');
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const db = new DatabaseSync(resolve(dataDir, 'leader.sqlite'));
 db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, owner INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS course_summaries (user_id TEXT NOT NULL, course_id TEXT NOT NULL, summary_json TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(user_id, course_id));');
+db.exec('CREATE TABLE IF NOT EXISTS recovery_codes (hash TEXT PRIMARY KEY, user_id TEXT UNIQUE NOT NULL)');
 const staticRoot = resolve(process.env.LEADER_STATIC_DIR || 'dist');
 const attempts = new Map();
 const moodleConnections = new Map();
@@ -46,8 +47,8 @@ function mergeMoodleData(user, result) {
  const data = JSON.parse(user.data);
  for (const course of result.courses) {
   const existing = data.courses.find(item => item.id === course.id);
-  if (existing) { existing.name = course.name; if (course.code) existing.code = course.code; }
-  else data.courses.push({ id:course.id, name:course.name, code:course.code, color:course.color });
+  if (existing) { if (course.resources) existing.resources = course.resources; existing.name = course.name; if (course.code) existing.code = course.code; }
+  else data.courses.push({ id:course.id, name:course.name, code:course.code, color:course.color, resources:course.resources });
  }
  const events = new Map((data.universityEvents ?? []).map(event => [event.id, event]));
  result.events.forEach(event => events.set(event.id, event));
@@ -69,13 +70,13 @@ async function body(req) {
  for await (const chunk of req) { count += chunk.length; if (count > 4 * 1024 * 1024) throw new Error('body-size'); chunks.push(chunk); }
  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
-function session(res, user) {
+function session(res, user, extra = {}) {
  user = withSharedContent(user);
  db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
  const token = randomBytes(32).toString('hex');
  db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token), user.id, expiry());
  res.setHeader('Set-Cookie', cookie(token));
- json(res, 200, { user: { id: user.id, username: user.username, owner: !!user.owner }, data: JSON.parse(user.data) });
+ json(res, 200, { ...extra, user: { id: user.id, username: user.username, owner: !!user.owner }, data: JSON.parse(user.data) });
 }
 function validOrigin(req) {
  try { const origin = new URL(req.headers.origin || ''); return origin.host === req.headers.host && ['http:', 'https:'].includes(origin.protocol); } catch { return false; }
@@ -89,13 +90,35 @@ const server = http.createServer(async (req, res) => {
   if (path.startsWith('/api/')) {
    if (!['GET', 'POST', 'PUT'].includes(req.method)) return json(res, 405, { error: 'طريقة الطلب غير متاحة.' });
    if (req.method !== 'GET' && !validOrigin(req)) return json(res, 403, { error: 'الطلب لا يأتي من موقع التطبيق.' });
+   if (path === '/api/auth/recover' && req.method === 'POST') {
+    const ip = req.socket.remoteAddress || 'local'; const now = Date.now();
+    const key = 'recovery:' + ip; let record = attempts.get(key);
+    if (!record || record.until < now) { record = { count:0, until:now + 15 * 60 * 1000 }; attempts.set(key, record); }
+    if (++record.count > 10) return json(res, 429, { error:'محاولات كثيرة. انتظر ١٥ دقيقة.' });
+    const payload = await body(req);
+    if (typeof payload.newPassword !== 'string' || payload.newPassword.length < 5 || payload.newPassword.length > 128) return json(res, 400, { error:'كلمة المرور الجديدة يجب أن تكون ٥ خانات على الأقل.' });
+    const code = String(payload.recoveryCode || '').replace(/[-\s]/g, '').toLowerCase();
+    const match = /^[a-f0-9]{64}$/.test(code) ? db.prepare('SELECT user_id FROM recovery_codes WHERE hash=?').get(hash(code)) : null;
+    if (!match) return json(res, 401, { error:'رمز الاسترداد غير صالح أو سبق استخدامه.' });
+    const salt = randomBytes(16).toString('hex'); const passwordHash = Buffer.from(await scrypt(payload.newPassword, salt, 64)).toString('hex');
+    // Consume the code after scrypt using a conditional delete so concurrent requests cannot replay it.
+    db.exec('BEGIN IMMEDIATE');
+    try {
+     const consumed = db.prepare('DELETE FROM recovery_codes WHERE hash=?').run(hash(code));
+     if (!consumed.changes) { db.exec('ROLLBACK'); return json(res,401,{ error:'رمز الاسترداد غير صالح أو سبق استخدامه.' }); }
+     db.prepare('UPDATE users SET salt=?, password_hash=? WHERE id=?').run(salt,passwordHash,match.user_id);
+     db.prepare('DELETE FROM sessions WHERE user_id=?').run(match.user_id); db.exec('COMMIT');
+    } catch(error) { db.exec('ROLLBACK'); throw error; }
+    moodleConnections.delete(match.user_id);
+    return session(res,db.prepare('SELECT * FROM users WHERE id=?').get(match.user_id));
+   }
    if (['/api/auth/register', '/api/auth/login'].includes(path) && req.method === 'POST') {
     const ip = req.socket.remoteAddress || 'local'; const now = Date.now();
     const record = attempts.get(ip);
     const attempt = !record || record.until < now ? { count: 0, until: now + 15 * 60 * 1000 } : record;
     attempts.set(ip, attempt); if (++attempt.count > 20) return json(res, 429, { error: 'محاولات كثيرة. انتظر قليلاً ثم حاول مجدداً.' });
     const payload = await body(req); const username = String(payload.username || '').trim().normalize('NFKC').toLowerCase(); const password = payload.password;
-    if (!/^[a-z0-9.!#$%&*+\/=?^_{}|~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(username) || username.length > 254 || typeof password !== 'string' || password.length < 3 || password.length > 128) return json(res, 400, { error: 'أدخل بريداً إلكترونياً صحيحاً وكلمة مرور من ٣ خانات على الأقل.' });
+    if (!/^[a-z0-9.!#$%&*+\/=?^_{}|~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(username) || username.length > 254 || typeof password !== 'string' || password.length < (path.endsWith('/register') ? 5 : 3) || password.length > 128) return json(res, 400, { error: 'أدخل بريداً إلكترونياً صحيحاً وكلمة مرور جديدة من ٥ خانات على الأقل.' });
     let user = db.prepare('SELECT * FROM users WHERE username=?').get(username);
     if (path.endsWith('/register')) {
      if (user) return json(res, 409, { error: 'اسم المستخدم غير متاح.' });
@@ -130,6 +153,20 @@ const server = http.createServer(async (req, res) => {
     const hydrated = withSharedContent(user);
     return json(res, 200, { user: { id: hydrated.id, username: hydrated.username, owner: !!hydrated.owner }, data: JSON.parse(hydrated.data) });
    }
+   if (['/api/auth/recovery-code', '/api/auth/password'].includes(path) && req.method === 'POST') {
+    const key = 'credential:' + user.id; const now = Date.now(); let record = attempts.get(key);
+    if (!record || record.until < now) { record = {count:0,until:now+15*60*1000}; attempts.set(key,record); }
+    if (++record.count > 10) return json(res,429,{error:'محاولات كثيرة. انتظر ١٥ دقيقة.'});
+   }
+   if (path === '/api/auth/recovery-code' && req.method === 'POST') {
+    const payload = await body(req); const password = payload.currentPassword;
+    if (typeof password !== 'string' || password.length > 128) return json(res,400,{ error:'أدخل كلمة المرور الحالية.' });
+    const actual = Buffer.from(await scrypt(password,user.salt,64));
+    if (!timingSafeEqual(actual,Buffer.from(user.password_hash,'hex'))) return json(res,401,{ error:'كلمة المرور الحالية غير صحيحة.' });
+    const code = randomBytes(32).toString('hex');
+    db.prepare('INSERT INTO recovery_codes (hash,user_id) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET hash=excluded.hash').run(hash(code),user.id);
+    return json(res,200,{ recoveryCode:code });
+   }
    if (path === '/api/auth/logout' && req.method === 'POST') {
     const token = /leader_session=([a-f0-9]{64})/.exec(req.headers.cookie || '')?.[1];
     if (token) db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token));
@@ -140,13 +177,14 @@ const server = http.createServer(async (req, res) => {
     const payload = await body(req);
     const currentPassword = payload.currentPassword;
     const newPassword = payload.newPassword;
-    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || newPassword.length < 3 || newPassword.length > 128) return json(res, 400, { error: 'كلمة المرور الجديدة يجب أن تكون ٣ خانات على الأقل.' });
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || newPassword.length < 5 || newPassword.length > 128) return json(res, 400, { error: 'كلمة المرور الجديدة يجب أن تكون ٥ خانات على الأقل.' });
     const actual = Buffer.from(await scrypt(currentPassword, user.salt, 64));
     if (!timingSafeEqual(Buffer.from(user.password_hash, 'hex'), actual)) return json(res, 401, { error: 'كلمة المرور الحالية غير صحيحة.' });
     const salt = randomBytes(16).toString('hex');
     const passwordHash = Buffer.from(await scrypt(newPassword, salt, 64)).toString('hex');
     db.prepare('UPDATE users SET salt=?, password_hash=? WHERE id=?').run(salt, passwordHash, user.id);
     db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+    db.prepare('DELETE FROM recovery_codes WHERE user_id=?').run(user.id);
     return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
    }
    if (path === '/api/auth/claim-owner' && req.method === 'POST') {
@@ -171,7 +209,7 @@ const server = http.createServer(async (req, res) => {
      const result = await syncMoodle(token);
      moodleConnections.set(user.id, token); moodleAttempts.delete(user.id);
      const updated = mergeMoodleData(user, result);
-     return json(res, 200, accountJson(updated, { connected:true, moodle:{ siteName:result.siteName, fullName:result.fullName, courseCount:result.courses.length, eventCount:result.events.length } }));
+     return json(res, 200, accountJson(updated, { connected:true, moodle:{ siteName:result.siteName, fullName:result.fullName, courseCount:result.courses.length, eventCount:result.events.length, warnings:result.warnings } }));
     } catch { return json(res, 502, { error:'تعذّر ربط مودل. تحقق من البيانات، أو قد تكون خدمة تطبيقات مودل غير مفعّلة لدى الجامعة.' }); }
    }
    if (path === '/api/moodle/sync' && req.method === 'POST') {

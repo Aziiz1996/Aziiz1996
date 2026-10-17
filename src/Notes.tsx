@@ -36,10 +36,10 @@ async function copyText(text: string) {
   return copied;
 }
 
-function NoteForm({ note, onClose }: { note?: Note; onClose: () => void }) {
+function NoteForm({ note, initialCourseId, onClose }: { note?: Note; initialCourseId?: string; onClose: () => void }) {
   const { data, update, notify } = useApp();
   const [title, setTitle] = useState(note?.title ?? '');
-  const [courseId, setCourseId] = useState(note?.courseId ?? '');
+  const [courseId, setCourseId] = useState(note?.courseId ?? initialCourseId ?? '');
   const [content, setContent] = useState(note?.content ?? '');
   const [summary, setSummary] = useState(note?.summary ?? '');
   const [error, setError] = useState('');
@@ -78,16 +78,16 @@ function NoteForm({ note, onClose }: { note?: Note; onClose: () => void }) {
   </Modal>;
 }
 
-export default function NotesPage() {
+export default function NotesPage({ initialCourseId }: { initialCourseId?: string } = {}) {
   const { data, update, notify, replace } = useApp();
   const [query, setQuery] = useState('');
-  const [courseId, setCourseId] = useState('all');
+  const [courseId, setCourseId] = useState(initialCourseId ?? 'all');
   const [editing, setEditing] = useState<Note | 'new' | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Note | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
-  const [aiCourseId, setAiCourseId] = useState(data.courses[0]?.id ?? '');
+  const [aiCourseId, setAiCourseId] = useState(initialCourseId ?? data.courses[0]?.id ?? '');
   const [syllabus, setSyllabus] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState('');
@@ -122,7 +122,7 @@ export default function NotesPage() {
     finally { setAiBusy(false); }
   }
   return <div className="page-content">
-    <StudyLibrary />
+    {!initialCourseId && <StudyLibrary />}
     <SectionHeader eyebrow="معرفتك، مرتّبة" title="ملخصات المواد" description="احتفظ بنصوص المحاضرات، واستخرج منها ملخصات أولية تراجعها بأسلوبك." action={<div className="row"><button className="btn btn-secondary" disabled={!data.courses.length} onClick={() => { setAiCourseId(data.courses[0]?.id ?? ''); setAiError(''); setAiOpen(true); }}><Sparkles size={18} />ملخص ذكي للمادة</button><button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={18} />إضافة ملاحظة</button></div>} />
     {data.notes.length === 0 ? <EmptyState icon={BookOpenText} title="مساحة لأفكارك وملاحظاتك" description="أضف نص المحاضرة، ثم أنشئ ملخصاً أولياً من الجمل المهمة وراجعه قبل المذاكرة." action={<button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={18} />إضافة أول ملاحظة</button>} /> : <>
       <div className="filters notes-filters"><div className="search-field"><Search size={18} /><input className="input" value={query} onChange={event => setQuery(event.target.value)} placeholder="ابحث في الملاحظات والملخصات…" aria-label="البحث في الملاحظات" /></div><select className="input" value={courseId} onChange={event => setCourseId(event.target.value)} aria-label="تصفية الملاحظات حسب المادة"><option value="all">كل المواد</option><option value="">بدون مادة</option>{data.courses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select><span className="muted note-count">{notes.length} ملاحظات</span></div>
@@ -137,7 +137,7 @@ export default function NotesPage() {
       <div className="summary-note"><Sparkles size={18} /><p>الملخص المحلي يُستخرج من نصك، والملخص الذكي يُنشأ عبر الخادم ويحفظ في حسابك. راجع النتيجة دائماً مع توصيف المادة والمحاضرة الأصلية.</p></div>
     </>}
     {aiOpen && <Modal title="إنشاء ملخص أكاديمي ذكي" onClose={() => !aiBusy && setAiOpen(false)}><form className="stack" onSubmit={generateSmartSummary}><Field label="المادة"><select className="input" required value={aiCourseId} onChange={event => setAiCourseId(event.target.value)}>{data.courses.map(course => <option key={course.id} value={course.id}>{course.name}{course.code ? ` — ${course.code}` : ''}</option>)}</select></Field><Field label="توصيف المادة أو نص المحاضرة (اختياري)"><textarea className="input textarea" rows={9} maxLength={30000} value={syllabus} onChange={event => setSyllabus(event.target.value)} placeholder="الصق توصيف المادة أو محتوى المحاضرة لملخص أدق…" /><span className="field-hint">عند تركه فارغاً يُنشئ النظام نظرة عامة ويذكر أنها قد تختلف عن توصيف الجامعة. مفتاح OpenAI محفوظ في الخادم ولا يصل إلى المتصفح.</span></Field>{aiError && <p className="notice danger" role="alert">{aiError}</p>}<div className="form-actions"><button className="btn btn-primary" disabled={aiBusy || !aiCourseId}><Sparkles size={17} />{aiBusy ? 'جارٍ إعداد الملخص…' : 'إنشاء وحفظ الملخص'}</button><button type="button" className="btn btn-secondary" disabled={aiBusy} onClick={() => setAiOpen(false)}>إلغاء</button></div></form></Modal>}
-    {editing && <NoteForm note={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
+    {editing && <NoteForm initialCourseId={initialCourseId} note={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
     {viewing && <Modal title={viewing.title} onClose={() => setViewingId(null)}><div className="stack note-view">
       <div className="row"><CourseBadge id={viewing.courseId} /><span className="muted">آخر تعديل {formatDate(viewing.updatedAt.slice(0, 10), true)}</span></div>
       <div className="note-view-actions row"><button className="btn btn-secondary" onClick={() => { setViewingId(null); setEditing(viewing); }}><Pencil size={16} />تعديل</button><button className="btn btn-secondary" onClick={() => void copy(viewing)}>{copiedId === viewing.id ? <Check size={16} /> : <Clipboard size={16} />}نسخ {viewing.summary ? 'الملخص' : 'النص'}</button><button className="btn btn-secondary" onClick={() => exportNote(viewing)}><Download size={16} />تصدير نصي</button></div>

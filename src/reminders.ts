@@ -1,6 +1,22 @@
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import type { Settings } from './types';
+import type { AppData } from './types';
+import { academicAlerts } from './academicAlerts';
+
+export async function disableAcademicReminders() {
+  if (Capacitor.isNativePlatform()) await LocalNotifications.cancel({ notifications:Array.from({length:56},(_,i)=>({id:7000+i})) });
+}
+
+export async function enableAcademicReminders(data:AppData):Promise<string> {
+  if (!Capacitor.isNativePlatform()) return 'في المتصفح استخدم تنزيل التقويم لاستيراد المواعيد والتنبيهات. إشعارات التطبيق تحتاج نسخة الهاتف.';
+  const permission=await LocalNotifications.requestPermissions();
+  if(permission.display!=='granted') return 'فعّل إذن التنبيهات من إعدادات الجهاز.';
+  const alerts=academicAlerts(data);
+  await disableAcademicReminders();
+  if(alerts.length) await LocalNotifications.schedule({notifications:alerts.map((e,i)=>({id:7000+i,title:e.title,body:e.minutes===60?'موعد المحاضرة بعد ساعة':e.minutes===1440?'الموعد غدًا في هذا الوقت':'الموعد بعد ساعتين',schedule:{at:new Date(e.at)}}))});
+  return `تم تفعيل ${alerts.length} تنبيهًا قادمًا. أعد التفعيل بعد تحديث الجداول. المواعيد غير محددة الوقت لا يُنشأ لها تنبيه.`;
+}
 
 export async function enableStudyReminders(settings: Settings): Promise<string> {
   if (!Capacitor.isNativePlatform()) return 'التذكيرات متاحة في نسخة الآيفون بعد تثبيتها.';

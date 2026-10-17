@@ -16,7 +16,7 @@ function loadData(): { data: AppData; error: string; recoveryRaw: string | null 
 }
 
 interface AppContextValue {
-  data: AppData; page: Page; update: (recipe: (draft: AppData) => void) => void;
+  accountId?: string; data: AppData; page: Page; update: (recipe: (draft: AppData) => void) => void;
   notify: (message: string) => void; navigate: (page: Page) => void;
   replace: (data: AppData) => boolean; storageError: string; recoveryRaw: string | null;
 }
@@ -67,7 +67,7 @@ export function AppProvider({ children, accountData, accountId }: { children: Re
     return () => controller.abort();
   }, [initial.error, replace, accountData]);
   const navigate = useCallback((next: Page) => { setPage(next); window.scrollTo({ top: 0, behavior: 'smooth' }); }, []);
-  return <AppContext.Provider value={{ data, page, update, notify, navigate, replace, storageError, recoveryRaw }}>
+  return <AppContext.Provider value={{ accountId, data, page, update, notify, navigate, replace, storageError, recoveryRaw }}>
     {children}
     {toast && <div className="toast" role="status">{toast}</div>}
   </AppContext.Provider>;

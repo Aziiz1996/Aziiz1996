@@ -28,7 +28,7 @@ export function parseMoodleCalendar(content: string): UniversityEvent[] {
         const end = parseIcsDate(current.DTEND || '');
         const title = unescapeIcs(current.SUMMARY || 'موعد جامعي').trim();
         if (start && title) {
-          const lowered = title.toLocaleLowerCase('ar');
+          const lowered = title.toLocaleLowerCase('ar').replace(/[إأآ]/g, 'ا');
           const kind: UniversityEvent['kind'] = /اختبار|exam|quiz|midterm|final/.test(lowered) ? 'exam' : /واجب|تكليف|assignment|due/.test(lowered) ? 'assignment' : /محاضرة|lecture|class|جلسة/.test(lowered) ? 'lecture' : 'event';
           events.push({ id: `moodle-${current.UID || `${start.date}-${start.time}-${title}`}`.slice(0, 145), title, date: start.date, time: start.time, endDate: end?.date, endTime: end?.time, kind, description: unescapeIcs(current.DESCRIPTION || '').slice(0, 200000), url: current.URL?.startsWith('https://') ? current.URL : undefined });
         }
@@ -49,17 +49,21 @@ const alarm = (trigger: string, label: string) => `BEGIN:VALARM\r\nTRIGGER:${tri
 
 export function buildStudyCalendar(data: AppData) {
   const rows = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Az Logistics//Study Calendar//AR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:عز اللوجستيات'];
-  const add = (id: string, title: string, date: string, time: string, endDate: string | undefined, endTime: string | undefined, details: string, alarms: string[]) => {
-    rows.push('BEGIN:VEVENT', `UID:${escapeIcs(id)}@az-logistics`, `DTSTAMP:${stamp(localDate(new Date()), localTime(new Date()))}`, time ? `DTSTART:${stamp(date, time)}` : `DTSTART;VALUE=DATE:${stamp(date)}`, time && endTime ? `DTEND:${stamp(endDate || date, endTime)}` : `DTEND;VALUE=DATE:${stamp(endDate || date)}`, `SUMMARY:${escapeIcs(title)}`, `DESCRIPTION:${escapeIcs(details)}`, ...alarms, 'END:VEVENT');
+  const add = (id: string, title: string, date: string, time: string, endDate: string | undefined, endTime: string | undefined, details: string, alarms: string[], url?: string) => {
+    const fallbackEnd = new Date(`${date}T${time || '00:00'}:00`);
+    fallbackEnd.setMinutes(fallbackEnd.getMinutes() + (time ? 60 : 1440));
+    const finishDate = endTime ? (endDate || date) : (time ? localDate(fallbackEnd) : endDate || localDate(fallbackEnd));
+    const finishTime = endTime || localTime(fallbackEnd);
+    rows.push('BEGIN:VEVENT', `UID:${escapeIcs(id)}@az-logistics`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')}`, time ? `DTSTART:${stamp(date, time)}` : `DTSTART;VALUE=DATE:${stamp(date)}`, time ? `DTEND:${stamp(finishDate, finishTime)}` : `DTEND;VALUE=DATE:${stamp(finishDate > date ? finishDate : localDate(fallbackEnd))}`, `SUMMARY:${escapeIcs(title)}`, `DESCRIPTION:${escapeIcs(details)}`, ...(url ? [`URL:${escapeIcs(url)}`] : []), ...alarms, 'END:VEVENT');
   };
-  for (const event of data.universityEvents ?? []) add(event.id, event.title, event.date, event.time, event.endDate, event.endTime, event.description || 'موعد مستورد من تقويم الجامعة', event.kind === 'lecture' ? [alarm('-PT1H', 'محاضرة بعد ساعة')] : [alarm('-P1D', 'موعد جامعي غداً'), alarm('-PT2H', 'موعد جامعي بعد ساعتين')]);
-  for (const task of data.tasks.filter(task => !task.completed)) add(task.id, task.title, task.due, task.time || '09:00', task.due, task.endTime, task.kind === 'exam' ? 'اختبار مسجل في عز اللوجستيات' : 'واجب أو مهمة مسجلة في عز اللوجستيات', [alarm('-P1D', 'موعد غداً'), alarm('-PT2H', 'متبقي ساعتان')]);
+  for (const event of data.universityEvents ?? []) add(event.id, event.title, event.date, event.time, event.endDate, event.endTime, event.description || 'موعد مستورد من تقويم الجامعة', event.kind === 'lecture' ? [alarm('-PT1H', 'محاضرة بعد ساعة')] : [alarm('-P1D', 'موعد جامعي غداً'), alarm('-PT2H', 'موعد جامعي بعد ساعتين')], event.url);
+  for (const task of data.tasks.filter(task => !task.completed && !(data.universityEvents ?? []).some(e => task.id === e.id + '-task'))) add(task.id, task.title, task.due, task.time || '', task.due, task.endTime, task.kind === 'exam' ? 'اختبار مسجل في عز اللوجستيات' : 'واجب أو مهمة مسجلة في عز اللوجستيات', [alarm('-P1D', 'موعد غداً'), alarm('-PT2H', 'متبقي ساعتان')]);
   const today = new Date();
   for (let offset = 0; offset < 56; offset++) {
     const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset);
     for (const lecture of data.lectures.filter(item => item.day === date.getDay() && item.start)) {
       const course = data.courses.find(item => item.id === lecture.courseId)?.name ?? 'محاضرة';
-      add(`${lecture.id}-${localDate(date)}`, course, localDate(date), lecture.start, localDate(date), lecture.end || undefined, lecture.location || 'محاضرة أسبوعية', [alarm('-PT1H', 'محاضرتك بعد ساعة')]);
+      add(`${lecture.id}-${localDate(date)}`, course, localDate(date), lecture.start, localDate(date), lecture.end || undefined, lecture.location || 'محاضرة أسبوعية', [alarm('-PT1H', 'محاضرتك بعد ساعة')], lecture.attendanceUrl);
     }
   }
   rows.push('END:VCALENDAR');

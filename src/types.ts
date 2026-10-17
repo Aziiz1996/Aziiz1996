@@ -1,7 +1,8 @@
 export type Page = 'university' | 'opportunities' | 'groups' | 'practice' | 'exams' | 'assistant' | 'dashboard' | 'courses' | 'plan' | 'tasks' | 'notes' | 'finance' | 'settings';
 export type TaskKind = 'assignment' | 'project' | 'exam';
 export type Priority = 'low' | 'medium' | 'high';
-export interface Course { id: string; name: string; color: string; code?: string; }
+export interface CourseResource { id: string; title: string; url: string; kind: string; section: string; }
+export interface Course { id: string; name: string; color: string; code?: string; resources?: CourseResource[]; }
 export interface Lecture { id: string; courseId: string; day: number; start: string; end: string; location: string; attendanceUrl?: string; fileUrl?: string; timePending?: string; }
 export interface Task { id: string; title: string; courseId: string; kind: TaskKind; due: string; priority: Priority; minutes: number; completed: boolean; time?: string; endTime?: string; timePending?: string; }
 export interface Note { id: string; title: string; courseId: string; content: string; summary: string; updatedAt: string; }

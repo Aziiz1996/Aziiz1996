@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AlertCircle, BookOpen, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock3, GraduationCap, ListChecks, MapPin, Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
+import NotesPage from './Notes';
 import { useApp, validUniversityUrl } from './store';
 import { CourseBadge, EmptyState, Field, Modal, SectionHeader } from './ui';
 import { buildStudyPlan, daysUntil, formatDate, todayISO } from './logic';
@@ -40,7 +41,7 @@ function CourseForm({ course, onClose }: { course?: Course; onClose: () => void 
     event.preventDefault();
     if (!name.trim()) { setError('أدخل اسم المادة.'); return; }
     update(draft => {
-      const value: Course = { id: course?.id ?? crypto.randomUUID(), name: name.trim(), color };
+      const value: Course = { ...course, id: course?.id ?? crypto.randomUUID(), name: name.trim(), color };
       const index = draft.courses.findIndex(item => item.id === value.id);
       if (index >= 0) draft.courses[index] = value;
       else draft.courses.push(value);
@@ -109,6 +110,7 @@ function LectureForm({ lecture, initialCourse, onClose }: { lecture?: Lecture; i
 
 export function CoursesPage() {
   const { data, update, notify } = useApp();
+  const [summaryCourse, setSummaryCourse] = useState<string | null>(null);
   const [courseForm, setCourseForm] = useState<Course | 'new' | null>(null);
   const [lectureForm, setLectureForm] = useState<Lecture | 'new' | null>(null);
   const [initialCourse, setInitialCourse] = useState('');
@@ -137,6 +139,7 @@ export function CoursesPage() {
     notify('تم حذف موعد المحاضرة');
   }
   return <div className="page-content">
+    {summaryCourse && <Modal title="ملخصات المادة" onClose={() => setSummaryCourse(null)}><NotesPage key={summaryCourse} initialCourseId={summaryCourse} /></Modal>}
     <SectionHeader eyebrow="كل مادة لها مكان" title="المواد والمحاضرات" description="اجمع موادك ومواعيدك، واستعد لأسبوع واضح." action={<button className="btn btn-primary" onClick={() => setCourseForm('new')}><Plus size={18} />إضافة مادة</button>} />
     {data.courses.length === 0 ? <EmptyState icon={GraduationCap} title="ابدأ بمادتك الأولى" description="أضف المواد التي تدرسها هذا الفصل، ثم سجّل مواعيد المحاضرات." action={<button className="btn btn-primary" onClick={() => setCourseForm('new')}><Plus size={18} />إضافة مادة</button>} /> : <>
       <div className="course-grid">{data.courses.map(course => {
@@ -146,6 +149,8 @@ export function CoursesPage() {
           <div className="card-heading"><span className="course-icon" style={{ color: course.color, backgroundColor: `${course.color}18` }}><BookOpen size={23} /></span><div className="row"><button className="icon-button" aria-label={`تعديل مادة ${course.name}`} onClick={() => setCourseForm(course)}><Pencil size={16} /></button><button className="icon-button danger" aria-label={`حذف مادة ${course.name}`} onClick={() => setDeletingCourse(course)}><Trash2 size={16} /></button></div></div>
           <h2>{course.name}</h2><p className="muted">{courseLectures.length} محاضرات أسبوعياً · {openTasks} مهام متبقية</p>
           <div className="course-lecture-list">{courseLectures.slice().sort((a, b) => a.day - b.day || (a.start || '99:99').localeCompare(b.start || '99:99')).map(lecture => <div key={lecture.id} className="course-lecture"><span>{DAYS[lecture.day]}</span><span dir="auto">{lectureTimeText(lecture)}</span></div>)}{courseLectures.length === 0 && <p className="muted">لم تضف مواعيد المحاضرات بعد.</p>}</div>
+          <button className="btn btn-secondary" onClick={() => setSummaryCourse(course.id)}><BookOpen size={16} />ملخصات المادة ({data.notes.filter(n => n.courseId === course.id).length})</button>
+          {(course.resources?.length ?? 0) > 0 && <details className="stack"><summary>محاضرات وروابط الكلية ({course.resources!.length})</summary>{course.resources!.map(resource => <p key={resource.id}><a href={resource.url} target="_blank" rel="noopener noreferrer">{resource.title}</a><span className="muted"> · {resource.section}</span></p>)}</details>}
           <button className="btn btn-ghost" onClick={() => addLecture(course.id)}><Plus size={16} />إضافة محاضرة</button>
         </article>;
       })}</div>

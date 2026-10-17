@@ -29,6 +29,7 @@ export function validateData(value: unknown): value is AppData {
     const rows = value[key];
     if (!Array.isArray(rows) || rows.length > 10000 || !rows.every(x => isObject(x) && typeof x.id === 'string' && x.id.length > 0 && x.id.length < 150) || new Set(rows.map(x => x.id)).size !== rows.length) return false;
   }
+  if (!(value.courses as Record<string, unknown>[]).every(c => c.resources === undefined || (Array.isArray(c.resources) && c.resources.length <= 1000 && c.resources.every(r => isObject(r) && textValue(r.id) && textValue(r.title) && textValue(r.kind) && textValue(r.section) && typeof r.url === 'string' && !!r.url && validUniversityUrl(r.url))))) return false;
   const courses = value.courses as Record<string, unknown>[];
   const courseIds = new Set(courses.map(c => c.id));
   const courseRef = (id: unknown) => id === '' || courseIds.has(id);

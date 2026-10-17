@@ -26,6 +26,7 @@ test('account isolation, signout, owner files, origin checks, and password hashi
    return { response, json, cookie: response.headers.get('set-cookie')?.split(';')[0] || '' };
   }
   assert.equal((await request('/api/auth/session')).response.status, 401);
+  assert.equal((await request('/api/auth/register', { method:'POST', value:{ username:'short@example.com', password:'1234' } })).response.status,400);
   const owner = await request('/api/auth/register', { method:'POST', value:{ username:'owner@example.com', password:'synthetic-password-one', ownerKey:'synthetic-owner-setup-key' } });
   assert.equal(owner.response.status,200); assert.equal(owner.json.user.owner,true);
   assert.match(owner.response.headers.get('set-cookie'), /HttpOnly/);
@@ -69,10 +70,20 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   assert.equal((await request('/api/auth/session', { cookie:owner.cookie })).response.status,401);
   const login = await request('/api/auth/login', { method:'POST', value:{ username:'owner@example.com', password:'synthetic-password-one' } });
   assert.equal(login.json.data.settings.name, 'Private owner data');
-  const changed = await request('/api/auth/password', { method:'POST', cookie:login.cookie, value:{ currentPassword:'synthetic-password-one', newPassword:'123' } });
+  const changed = await request('/api/auth/password', { method:'POST', cookie:login.cookie, value:{ currentPassword:'synthetic-password-one', newPassword:'12345' } });
   assert.equal(changed.response.status, 200); assert.equal(changed.json.user.owner, true);
   assert.equal((await request('/api/auth/login', { method:'POST', value:{ username:'owner@example.com', password:'synthetic-password-one' } })).response.status,401);
-  assert.equal((await request('/api/auth/login', { method:'POST', value:{ username:'owner@example.com', password:'123' } })).response.status,200);
+  assert.equal((await request('/api/auth/login', { method:'POST', value:{ username:'owner@example.com', password:'12345' } })).response.status,200);
+  const issued = await request('/api/auth/recovery-code', { method:'POST', cookie:changed.cookie, value:{currentPassword:'12345'} });
+  assert.equal(issued.response.status,200); assert.match(issued.json.recoveryCode,/^[a-f0-9]{64}$/);
+  assert.equal((await request('/api/auth/recovery-code', { method:'POST', cookie:changed.cookie, value:{currentPassword:'wrong'} })).response.status,401);
+  assert.equal((await request('/api/auth/recover', { method:'POST', value:{recoveryCode:issued.json.recoveryCode,newPassword:'1234'} })).response.status,400);
+  const recovered = await request('/api/auth/recover', { method:'POST', value:{recoveryCode:issued.json.recoveryCode,newPassword:'56789'} });
+  assert.equal(recovered.response.status,200); assert.equal(recovered.json.user.username,'owner@example.com');
+  assert.equal((await request('/api/auth/session', {cookie:changed.cookie})).response.status,401);
+  assert.equal((await request('/api/auth/recover', { method:'POST', value:{recoveryCode:issued.json.recoveryCode,newPassword:'98765'} })).response.status,401);
+  assert.equal((await request('/api/auth/login', {method:'POST',value:{username:'owner@example.com',password:'12345'}})).response.status,401);
+  assert.equal((await request('/api/auth/login', {method:'POST',value:{username:'owner@example.com',password:'56789'}})).response.status,200);
   const { DatabaseSync } = await import('node:sqlite');
   const database = new DatabaseSync(join(directory, 'leader.sqlite'));
   const stored = database.prepare('SELECT password_hash FROM users WHERE username=?').get('owner@example.com');
@@ -86,7 +97,7 @@ test('an authenticated account can claim the unassigned owner role once and rece
  const processHandle = spawn(process.execPath, ['--experimental-strip-types', 'server/index.mjs'], { env: { ...process.env, PORT:String(port), LEADER_DATA_DIR:directory, LEADER_OWNER_SETUP_KEY:'unused-setup-key', NODE_ENV:'test' }, stdio:['ignore','pipe','pipe'] });
  try {
   await Promise.race([once(processHandle.stdout, 'data'), once(processHandle, 'exit').then(() => { throw new Error('Server failed'); }), new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Startup timeout')), 10000); timer.unref(); })]);
-  const registration = await fetch(base + '/api/auth/register', { method:'POST', headers:{ Origin:base, 'Content-Type':'application/json' }, body:JSON.stringify({ username:'operator@example.com', password:'123' }) });
+  const registration = await fetch(base + '/api/auth/register', { method:'POST', headers:{ Origin:base, 'Content-Type':'application/json' }, body:JSON.stringify({ username:'operator@example.com', password:'12345' }) });
   const registered = await registration.json();
   assert.equal(registered.user.owner, false);
   const cookie = registration.headers.get('set-cookie').split(';')[0];
