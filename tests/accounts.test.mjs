@@ -28,6 +28,9 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   assert.match(owner.response.headers.get('set-cookie'), /HttpOnly/);
   const member = await request('/api/auth/register', { method:'POST', value:{ username:'member@example.com', password:'synthetic-password-two' } });
   assert.equal(member.response.status,200); assert.equal(member.json.user.owner,false);
+  assert.equal(member.json.data.lectures.length, 5);
+  assert.equal(member.json.data.notes.length, 5);
+  assert.deepEqual(member.json.data.notes.map(n => n.id), owner.json.data.notes.map(n => n.id));
   assert.equal((await request('/api/auth/claim-owner', { method:'POST', cookie:member.cookie })).response.status,409);
   const data = emptyData(); data.settings.name = 'Private owner data';
   const save = await request('/api/data', { method:'PUT', cookie:owner.cookie, value:data, account:owner.json.user.id });
