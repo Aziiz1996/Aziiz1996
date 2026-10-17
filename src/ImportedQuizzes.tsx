@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PROVIDED_MATERIALS } from './providedMaterials';
 import { useApp } from './store';
 import { gradeImportedQuiz } from './studyMaterials';
 import type { ImportedQuiz } from './types';
@@ -11,8 +12,8 @@ function QuizAttempt({quiz}:{quiz:ImportedQuiz}) {
 }
 
 export default function ImportedQuizzes() {
- const {data}=useApp();const quizzes=data.quizzes??[];const [selected,setSelected]=useState(quizzes[0]?.id??'');
+ const {data}=useApp();const quizzes=[...new Map([...(data.quizzes??[]),...PROVIDED_MATERIALS.quizzes].map(q=>[q.id,q])).values()];const [selected,setSelected]=useState(quizzes[0]?.id??'');
  const quiz=quizzes.find(q=>q.id===selected)||quizzes[0];
  if(!quiz)return null;
- return <section className="card stack"><h2>اختباراتك المضافة</h2><label>اختر الاختبار<select className="input" value={quiz.id} onChange={e=>setSelected(e.target.value)}>{quizzes.map(q=><option key={q.id} value={q.id}>{q.title} ({q.questions.length} سؤالًا)</option>)}</select></label><QuizAttempt quiz={quiz} key={quiz.id} /></section>;
+ return <section className="card stack"><h2>الاختبارات المشتركة والمضافة</h2><label>اختر الاختبار<select className="input" value={quiz.id} onChange={e=>setSelected(e.target.value)}>{quizzes.map(q=><option key={q.id} value={q.id}>{q.title} ({q.questions.length} سؤالًا)</option>)}</select></label><QuizAttempt quiz={quiz} key={quiz.id} /></section>;
 }

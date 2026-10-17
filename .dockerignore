@@ -1,0 +1,16 @@
+.git
+node_modules
+dist
+.leader-data
+.env
+.env.*
+!.env.example
+public/personal-lessons
+work
+outputs
+.local-*
+pnpm-lock.yaml
+playwright-results
+__pycache__
+*.sqlite*
+python_backend/service-account*.json

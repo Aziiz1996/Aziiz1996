@@ -1,10 +1,13 @@
 import http from 'node:http';
+import { answerTutor } from './tutor.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, randomUUID, createHash, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve, extname, sep } from 'node:path';
 import { emptyData, validateData } from '../src/validation.ts';
+import { mergeStudyMaterials } from '../src/studyMaterials.ts';
+import { PROVIDED_MATERIALS } from '../src/providedMaterials.ts';
 import { LOGISTICS_LESSONS } from '../src/logisticsContent.ts';
 import { connectMoodle, syncMoodle } from './moodle.mjs';
 import { generateAcademicSummary } from './openai.mjs';
@@ -39,7 +42,10 @@ function withSharedContent(user) {
   if (!data.lectures.some(lecture => lecture.id === lesson.id)) data.lectures.push({ id: lesson.id, courseId, day: index, start: '', end: '', location: lesson.title, timePending: 'حدّد الموعد ورابط الحضور من منصة مودل' });
   if (!data.notes.some(note => note.id === lesson.id)) data.notes.push({ id: lesson.id, courseId, title: lesson.title, content: lesson.summary, summary: lesson.summary, updatedAt: new Date().toISOString() });
  });
- const serialized = JSON.stringify(data);
+ let sharedData = data;
+ // A full personal account must remain accessible even if it cannot accept more notes.
+ try { sharedData = mergeStudyMaterials(data, PROVIDED_MATERIALS).data; } catch {}
+ const serialized = JSON.stringify(sharedData);
  if (serialized !== before) db.prepare('UPDATE users SET data=? WHERE id=?').run(serialized, user.id);
  return { ...user, data: serialized };
 }
@@ -64,7 +70,14 @@ function mergeMoodleData(user, result) {
  db.prepare('UPDATE users SET data=? WHERE id=?').run(serialized, user.id);
  return { ...user, data:serialized };
 }
-function accountJson(user, extra = {}) { return { ...extra, user:{ id:user.id, username:user.username, owner:!!user.owner }, data:JSON.parse(user.data) }; }
+function userJson(user) {
+ const ownerEmail=String(process.env.LEADER_OWNER_EMAIL||'').trim().normalize('NFKC').toLowerCase();
+ const assigned=!!db.prepare('SELECT id FROM users WHERE owner=1').get();
+ const keyRequired=!!process.env.LEADER_OWNER_SETUP_KEY;
+ const first=db.prepare('SELECT id FROM users ORDER BY rowid LIMIT 1').get();
+ return {id:user.id,username:user.username,owner:!!user.owner,canClaimOwner:!assigned&&(!ownerEmail||user.username===ownerEmail)&&(keyRequired||(!ownerEmail&&first?.id===user.id)),ownerKeyRequired:keyRequired};
+}
+function accountJson(user, extra = {}) { return { ...extra, user:userJson(user), data:JSON.parse(user.data) }; }
 async function body(req) {
  let count = 0; const chunks = [];
  for await (const chunk of req) { count += chunk.length; if (count > 4 * 1024 * 1024) throw new Error('body-size'); chunks.push(chunk); }
@@ -76,7 +89,7 @@ function session(res, user, extra = {}) {
  const token = randomBytes(32).toString('hex');
  db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token), user.id, expiry());
  res.setHeader('Set-Cookie', cookie(token));
- json(res, 200, { ...extra, user: { id: user.id, username: user.username, owner: !!user.owner }, data: JSON.parse(user.data) });
+ json(res, 200, { ...extra, user:userJson(user), data: JSON.parse(user.data) });
 }
 function validOrigin(req) {
  try { const origin = new URL(req.headers.origin || ''); return origin.host === req.headers.host && ['http:', 'https:'].includes(origin.protocol); } catch { return false; }
@@ -129,7 +142,8 @@ const server = http.createServer(async (req, res) => {
      const validOwnerKey = !!ownerKey && typeof payload.ownerKey === 'string' && timingSafeEqual(Buffer.from(hash(ownerKey)), Buffer.from(hash(payload.ownerKey)));
      // On simple deployments without a setup key, the first account safely closes
      // the one-time owner bootstrap. Hosted deployments can still require a key.
-     const owner = !ownerExists && (validOwnerKey || (!ownerKey && accountCount === 0));
+     const ownerEmail=String(process.env.LEADER_OWNER_EMAIL||'').trim().normalize('NFKC').toLowerCase();
+     const owner = !ownerExists && (!ownerEmail||username===ownerEmail) && (validOwnerKey || (!ownerKey && !ownerEmail && accountCount === 0));
      const id = randomUUID(); const data = emptyData(); data.settings.name = username;
      db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?)').run(id, username, salt, passwordHash, owner ? 1 : 0, JSON.stringify(data));
      user = db.prepare('SELECT * FROM users WHERE id=?').get(id);
@@ -140,7 +154,7 @@ const server = http.createServer(async (req, res) => {
      const ownerKey = process.env.LEADER_OWNER_SETUP_KEY;
      const ownerExists = !!db.prepare('SELECT id FROM users WHERE owner=1').get();
      const accountCount = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
-     if (!ownerKey && !ownerExists && accountCount === 1) {
+     if (!ownerKey && !process.env.LEADER_OWNER_EMAIL && !ownerExists && accountCount === 1) {
       db.prepare('UPDATE users SET owner=1 WHERE id=?').run(user.id);
       user = db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
      }
@@ -151,7 +165,7 @@ const server = http.createServer(async (req, res) => {
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
    if (path === '/api/auth/session' && req.method === 'GET') {
     const hydrated = withSharedContent(user);
-    return json(res, 200, { user: { id: hydrated.id, username: hydrated.username, owner: !!hydrated.owner }, data: JSON.parse(hydrated.data) });
+    return json(res, 200, { user:userJson(hydrated), data: JSON.parse(hydrated.data) });
    }
    if (['/api/auth/recovery-code', '/api/auth/password'].includes(path) && req.method === 'POST') {
     const key = 'credential:' + user.id; const now = Date.now(); let record = attempts.get(key);
@@ -190,6 +204,13 @@ const server = http.createServer(async (req, res) => {
    if (path === '/api/auth/claim-owner' && req.method === 'POST') {
     const existingOwner = db.prepare('SELECT id FROM users WHERE owner=1').get();
     if (existingOwner && existingOwner.id !== user.id) return json(res, 409, { error: 'تم تفعيل حساب مدير التطبيق مسبقاً.' });
+    if(existingOwner?.id===user.id)return session(res,user);
+    const policy=userJson(user);
+    if(!policy.canClaimOwner)return json(res,403,{error:'هذا الحساب غير مؤهل لتفعيل المالك وفق إعدادات الخادم.'});
+    if(policy.ownerKeyRequired){const payload=await body(req);const configured=process.env.LEADER_OWNER_SETUP_KEY;const given=String(payload.ownerKey||'');if(!timingSafeEqual(Buffer.from(hash(configured)),Buffer.from(hash(given))))return json(res,403,{error:'رمز تفعيل المالك غير صحيح.'});}
+    // Recheck after reading the request body so concurrent claims cannot create two owners.
+    const claimedOwner=db.prepare('SELECT id FROM users WHERE owner=1').get();
+    if(claimedOwner&&claimedOwner.id!==user.id)return json(res,409,{error:'تم تفعيل حساب مدير التطبيق مسبقاً.'});
     db.prepare('UPDATE users SET owner=1 WHERE id=?').run(user.id);
     return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
    }
@@ -219,6 +240,15 @@ const server = http.createServer(async (req, res) => {
      const result = await syncMoodle(token); const updated = mergeMoodleData(user, result);
      return json(res, 200, accountJson(updated, { connected:true, moodle:{ siteName:result.siteName, fullName:result.fullName, courseCount:result.courses.length, eventCount:result.events.length } }));
     } catch { moodleConnections.delete(user.id); return json(res, 502, { error:'تعذّرت مزامنة مودل. أعد الربط وحاول مرة أخرى.' }); }
+   }
+   if (path === '/api/ai/status' && req.method === 'GET') return json(res,200,{tutorEnabled:!!process.env.OPENAI_API_KEY});
+   if (path === '/api/ai/tutor' && req.method === 'POST') {
+    const payload=await body(req);const question=typeof payload.question==='string'?payload.question.trim():'';
+    if(!question||question.length>4000)return json(res,400,{error:'اكتب سؤالًا من ١ إلى ٤٠٠٠ حرف.'});
+    const useAI=payload.useAI===true;
+    if(useAI){const key='tutor:'+user.id;const now=Date.now();let record=summaryAttempts.get(key);if(!record||record.until<now){record={count:0,until:now+86400000};summaryAttempts.set(key,record);}if(++record.count>30)return json(res,429,{error:'وصلت إلى حد الشرح الذكي اليوم؛ البحث في ملخصاتك يبقى متاحًا.'});}
+    try{return json(res,200,await answerTutor(JSON.parse(withSharedContent(user).data),question,useAI));}
+    catch(error){return json(res,error.message==='tutor-unconfigured'?503:502,{error:error.message==='tutor-unconfigured'?'لم تُفعّل خدمة الشرح الذكي على الخادم. ألغِ اختيارها للبحث في الملخصات.':'تعذرت خدمة الشرح الذكي. يمكنك البحث في الملخصات دونها.'});}
    }
    if (path === '/api/ai/course-summary' && req.method === 'POST') {
     if (!process.env.OPENAI_API_KEY) return json(res, 503, { error:'خدمة التلخيص الذكي غير مفعّلة بعد. أضف OPENAI_API_KEY في إعدادات Render.' });

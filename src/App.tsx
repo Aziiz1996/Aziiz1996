@@ -1,3 +1,4 @@
+import { useHeaderLayout } from './headerLayout';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CalendarDays, Check, ChevronLeft, CircleHelp, ClipboardList, Clock3, ExternalLink, FileText, GraduationCap, LayoutDashboard, Settings2, Sparkles, Target, Wallet, AlertCircle, Users, BriefcaseBusiness } from 'lucide-react';
 import { AppProvider, useApp } from './store';
@@ -22,7 +23,7 @@ const NAV = [
   { id: 'groups', label: 'مجموعات المشاريع', icon: Users },
   { id: 'exams', label: 'جدول الاختبارات', icon: CalendarDays },
   { id: 'practice', label: 'اختبارات تجريبية', icon: CircleHelp },
-  { id: 'assistant', label: 'المساعد الصوتي', icon: CircleHelp },
+  { id: 'assistant', label: 'تيتشر لوجستيك', icon: CircleHelp },
   { id: 'dashboard', label: 'نظرة عامة', icon: LayoutDashboard },
   { id: 'courses', label: 'المواد والمحاضرات', icon: GraduationCap },
   { id: 'plan', label: 'خطة المذاكرة', icon: CalendarDays },
@@ -104,6 +105,7 @@ function Dashboard() {
 }
 
 function Shell() {
+  useHeaderLayout();
   const { data, page, navigate, storageError } = useApp();
   const current = NAV.find(n => n.id === page)!;
   return <div className="app-shell"><aside className="sidebar"><button className="brand" onClick={() => navigate('dashboard')} aria-label="عز اللوجستيات، الصفحة الرئيسية"><span className="brand-icon"><img src="./leader-icon.png" alt="" /></span><span><strong>عز اللوجستيات</strong><small className="brand-caption">رفيق دبلوم سلاسل الإمداد</small></span></button><span className="sidebar-label">مساحتك اليومية</span><nav aria-label="التنقل الرئيسي">{NAV.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'nav-item active' : 'nav-item'} aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id as Page)}><Icon size={20} /><span>{label}</span>{id === 'tasks' && data.tasks.filter(t => !t.completed).length > 0 && <span className="nav-count">{number(data.tasks.filter(t => !t.completed).length)}</span>}</button>)}{data.settings.universityUrl && <a className="nav-item university-link" href={data.settings.universityUrl} target="_blank" rel="noopener noreferrer" aria-label="فتح موقع الجامعة في نافذة جديدة"><ExternalLink size={20} /><span>موقع الجامعة</span></a>}</nav><div className="sidebar-bottom"><span className="sidebar-quote">خفّف الزحام.<br />اترك مساحة للإنجاز.</span><div className="sidebar-profile"><span className="avatar">{data.settings.name?.[0] || 'م'}</span><div><strong>{data.settings.name || 'مساحتي الشخصية'}</strong><span>خطوة بخطوة ✦</span></div><button className="icon-button" aria-label="تعديل الملف والتفضيلات" onClick={() => navigate('settings')}><Settings2 size={18} /></button></div></div></aside><main className="main"><header className="topbar"><div className="topbar-title"><span>مساحتي</span><ChevronLeft size={14} /><strong>{current.label}</strong></div><div className="topbar-actions"><span className="today-label"><CalendarDays size={17} />{formatDate(todayISO(), true)}</span><button className="avatar" aria-label="فتح الإعدادات" onClick={() => navigate('settings')}>{data.settings.name?.[0] || 'م'}</button></div></header>{storageError && <div className="notice danger storage-warning" role="alert">{storageError}</div>}{data.demo && <div className="notice demo-banner"><Sparkles size={18} /><span>هذه بيانات تجريبية. ابدأ ببياناتك من الإعدادات.</span><button className="btn btn-ghost" onClick={() => navigate('settings')}>فتح الإعدادات</button></div>}{page === 'university' && <UniversityPage />}{page === 'opportunities' && <OpportunitiesPage />}{page === 'groups' && <GroupsPage />}{page === 'practice' && <PracticePage />}{page === 'exams' && <TasksPage key="exams" initialKind="exam" />}{page === 'assistant' && <AssistantPage />}{page === 'dashboard' && <Dashboard />}{page === 'courses' && <CoursesPage />}{page === 'plan' && <PlanPage />}{page === 'tasks' && <TasksPage key="tasks" />}{page === 'notes' && <NotesPage />}{page === 'finance' && <div className="page-content"><FinancePage /></div>}{page === 'settings' && <div className="page-content"><SettingsPage /></div>}</main></div>;

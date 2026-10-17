@@ -10,7 +10,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build && node scripts/build-offline.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --experimental-strip-types --test tests/logic.test.ts tests/calendar.test.ts tests/academicAlerts.test.ts tests/studyMaterials.test.ts tests/moodle.test.mjs tests/openai.test.mjs",
+    "test": "node --experimental-strip-types --test tests/logic.test.ts tests/calendar.test.ts tests/academicAlerts.test.ts tests/studyMaterials.test.ts tests/moodle.test.mjs tests/openai.test.mjs tests/tutor.test.mjs",
     "test:browser": "python3 tests/browser_smoke.py",
     "ios:sync": "npm run build && cap sync ios",
     "ios:open": "cap open ios",

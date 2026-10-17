@@ -5,6 +5,8 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { PROVIDED_MATERIALS } from '../src/providedMaterials.ts';
+const STARTER_NOTES = 5 + PROVIDED_MATERIALS.summaries.length;
 import { emptyData } from '../src/validation.ts';
 
 test('account isolation, signout, owner files, origin checks, and password hashing', async () => {
@@ -26,6 +28,7 @@ test('account isolation, signout, owner files, origin checks, and password hashi
    return { response, json, cookie: response.headers.get('set-cookie')?.split(';')[0] || '' };
   }
   assert.equal((await request('/api/auth/session')).response.status, 401);
+  assert.equal((await request('/api/ai/tutor',{method:'POST',value:{question:'ABC'}})).response.status,401);
   assert.equal((await request('/api/auth/register', { method:'POST', value:{ username:'short@example.com', password:'1234' } })).response.status,400);
   const owner = await request('/api/auth/register', { method:'POST', value:{ username:'owner@example.com', password:'synthetic-password-one', ownerKey:'synthetic-owner-setup-key' } });
   assert.equal(owner.response.status,200); assert.equal(owner.json.user.owner,true);
@@ -33,15 +36,23 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   const member = await request('/api/auth/register', { method:'POST', value:{ username:'member@example.com', password:'synthetic-password-two' } });
   assert.equal(member.response.status,200); assert.equal(member.json.user.owner,false);
   assert.equal(member.json.data.lectures.length, 5);
-  assert.equal(member.json.data.notes.length, 5);
+  assert.equal(member.json.data.notes.length, STARTER_NOTES);
+  assert.equal(member.json.data.quizzes[0].questions.length,40);
   assert.deepEqual(member.json.data.notes.map(n => n.id), owner.json.data.notes.map(n => n.id));
   const personal = member.json.data; personal.notes[0].summary = 'Member private edit';
   personal.notes.push({ id:'private-member-note', courseId:'', title:'Private', content:'Secret', summary:'Secret', updatedAt:new Date().toISOString() });
   assert.equal((await request('/api/data', { method:'PUT', cookie:member.cookie, account:member.json.user.id, value:personal })).response.status,200);
   const refreshed = await request('/api/auth/session', { cookie:member.cookie });
-  assert.equal(refreshed.json.data.notes.length, 6);
+  assert.equal(refreshed.json.data.notes.length, STARTER_NOTES + 1);
   assert.equal(refreshed.json.data.notes[0].summary, 'Member private edit');
-  assert.equal((await request('/api/auth/session', { cookie:owner.cookie })).json.data.notes.length, 5);
+  assert.equal((await request('/api/ai/status',{cookie:member.cookie})).json.tutorEnabled,false);
+  const tutor=await request('/api/ai/tutor',{method:'POST',cookie:member.cookie,value:{question:'Secret',useAI:false}});
+  assert.equal(tutor.response.status,200);assert.ok(tutor.json.sources.some(n=>n.id==='private-member-note'));
+  const ownerTutor=await request('/api/ai/tutor',{method:'POST',cookie:owner.cookie,value:{question:'Secret',useAI:false}});
+  assert.ok(!ownerTutor.json.sources.some(n=>n.id==='private-member-note'));
+  assert.equal((await request('/api/ai/tutor',{method:'POST',cookie:member.cookie,value:{question:'ABC',useAI:true}})).response.status,503);
+
+  assert.equal((await request('/api/auth/session', { cookie:owner.cookie })).json.data.notes.length, STARTER_NOTES);
   assert.equal((await request('/api/auth/claim-owner', { method:'POST', cookie:member.cookie })).response.status,409);
   const data = emptyData(); data.settings.name = 'Private owner data';
   const save = await request('/api/data', { method:'PUT', cookie:owner.cookie, value:data, account:owner.json.user.id });
@@ -62,7 +73,7 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   const legacy = emptyData(); legacy.notes.push({ id:'legacy-private', courseId:'', title:'Legacy', content:'Personal text', summary:'', updatedAt:new Date().toISOString() });
   assert.equal((await request('/api/data', { method:'PUT', cookie:member.cookie, account:member.json.user.id, value:legacy })).response.status,200);
   const migrated = await request('/api/auth/session', { cookie:member.cookie });
-  assert.equal(migrated.json.data.notes.length,6);
+  assert.equal(migrated.json.data.notes.length,STARTER_NOTES + 1);
   assert.equal(migrated.json.data.notes[0].content,'Personal text');
   assert.equal(migrated.json.data.lectures.length,5);
   assert.equal((await request('/api/auth/login', { method:'POST', value:{ username:'owner@example.com', password:'incorrect-password' } })).response.status,401);
@@ -101,12 +112,14 @@ test('an authenticated account can claim the unassigned owner role once and rece
   const registered = await registration.json();
   assert.equal(registered.user.owner, false);
   const cookie = registration.headers.get('set-cookie').split(';')[0];
-  const claim = await fetch(base + '/api/auth/claim-owner', { method:'POST', headers:{ Origin:base, Cookie:cookie } });
+  const denied = await fetch(base + '/api/auth/claim-owner', {method:'POST',headers:{Origin:base,Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({ownerKey:'wrong-key'})});
+  assert.equal(denied.status,403);
+  const claim = await fetch(base + '/api/auth/claim-owner', { method:'POST', headers:{ Origin:base, Cookie:cookie, 'Content-Type':'application/json' },body:JSON.stringify({ownerKey:'unused-setup-key'}) });
   const claimed = await claim.json();
   assert.equal(claim.status, 200); assert.equal(claimed.user.owner, true);
   assert.equal(claimed.data.courses[0].name, 'إدارة المخزون والمخازن');
   assert.equal(claimed.data.lectures.length, 5);
-  assert.equal(claimed.data.notes.length, 5);
+  assert.equal(claimed.data.notes.length, STARTER_NOTES);
   assert.equal(claimed.data.notes[0].id, 'inventory-lecture-1');
  } finally { processHandle.kill(); await once(processHandle, 'exit'); rmSync(directory,{ recursive:true, force:true }); }
 });

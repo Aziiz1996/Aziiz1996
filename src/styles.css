@@ -1081,3 +1081,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 480px) {
   .main:has(.dashboard-grid)::after, .main:has(.settings-grid)::after { margin-bottom: 24px; font-size: 10px; }
 }
+
+/* Measure both fixed bars so menus stay reachable at mobile text sizes. */
+:root { --account-height:64px; --mobile-nav-height:124px; }
+html { scroll-padding-top:calc(var(--account-height) + 90px); }
+.account-bar { top:0; padding-top:calc(10px + env(safe-area-inset-top)); z-index:60; }
+.app-shell { padding-top:var(--account-height); }
+.sidebar { top:var(--account-height); height:calc(100dvh - var(--account-height)); }
+.topbar { top:var(--account-height); z-index:40; }
+.account-bar details[open] > :not(summary) { position:fixed; top:calc(var(--account-height) + 8px); left:12px; right:auto; width:min(380px,calc(100vw - 24px)); max-height:calc(100dvh - var(--account-height) - 24px); overflow:auto; padding:18px; color:var(--text); background:white; border:1px solid var(--border); border-radius:16px; box-shadow:0 12px 32px #06112a33; }
+@media(max-width:760px) {
+ html { scroll-padding-top:calc(var(--account-height) + var(--mobile-nav-height) + 80px); }
+ .account-bar { flex-wrap:wrap; padding:calc(8px + env(safe-area-inset-top)) 12px 8px; }
+ .account-bar > [role=alert] { flex-basis:100%; }
+ .account-bar details > summary { font-size:10px; width:auto; min-width:44px; min-height:44px; }
+ .account-bar details > summary::before { content:none; }
+ .account-bar .account-identity { display:none; }
+ .app-shell { padding-top:calc(var(--account-height) + var(--mobile-nav-height)); }
+ .sidebar { position:fixed; top:var(--account-height); right:0; left:0; height:auto; z-index:50; padding-top:10px; padding-bottom:10px; }
+ .sidebar .brand { margin-bottom:10px; }
+ .sidebar nav { touch-action:pan-x; overscroll-behavior-x:contain; }
+ .sidebar .nav-item { min-height:44px; }
+ .topbar { top:calc(var(--account-height) + var(--mobile-nav-height)); }
+}
+@media print { .sidebar,.topbar { display:none!important; } .app-shell { padding-top:0!important; } }
