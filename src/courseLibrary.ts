@@ -75,7 +75,7 @@ export const COURSE_LIBRARY:readonly CourseLibraryFile[] = [
     "course": "إدارة المخزون والمخازن",
     "title": "مقدمة في إدارة المخزون والمخازن، المفاهيم الأساسية والاهمية الاستراتيجية",
     "kind": "lecture",
-    "order": 99,
+    "order": 1,
     "pages": 39,
     "bytes": 8375049,
     "url": "/course-library/e608608408e690836251.pdf"
@@ -175,7 +175,7 @@ export const COURSE_LIBRARY:readonly CourseLibraryFile[] = [
     "course": "إدارة النقل والشحن الدولي",
     "title": "المحاضرة الثانية - م2 ج2",
     "kind": "lecture",
-    "order": 2,
+    "order": 2.5,
     "pages": 21,
     "bytes": 3136773,
     "url": "/course-library/5f36dc47cbe3a2337e47.pdf"
@@ -205,7 +205,7 @@ export const COURSE_LIBRARY:readonly CourseLibraryFile[] = [
     "course": "مبادئ إدارة الأعمال",
     "title": "Ch 1 - مفهوم الإدارة",
     "kind": "lecture",
-    "order": 99,
+    "order": 1,
     "pages": 27,
     "bytes": 12260437,
     "url": "/course-library/57584733d818f466bc32.pdf"
@@ -215,7 +215,7 @@ export const COURSE_LIBRARY:readonly CourseLibraryFile[] = [
     "course": "مبادئ إدارة الأعمال",
     "title": "Ch 2 - التطور الفكري للمفهوم الإداري",
     "kind": "lecture",
-    "order": 99,
+    "order": 2,
     "pages": 28,
     "bytes": 5270593,
     "url": "/course-library/499253ccaa9708fa5625.pdf"
@@ -225,7 +225,7 @@ export const COURSE_LIBRARY:readonly CourseLibraryFile[] = [
     "course": "مبادئ إدارة الأعمال",
     "title": "Ch3 - التخطيط",
     "kind": "lecture",
-    "order": 99,
+    "order": 3,
     "pages": 28,
     "bytes": 7595751,
     "url": "/course-library/212e79e29c2aaaf50334.pdf"
@@ -235,7 +235,7 @@ export const COURSE_LIBRARY:readonly CourseLibraryFile[] = [
     "course": "مبادئ إدارة الأعمال",
     "title": "Ch5 - التنظيم",
     "kind": "lecture",
-    "order": 99,
+    "order": 5,
     "pages": 36,
     "bytes": 2135665,
     "url": "/course-library/a40599ee48a66a311201.pdf"
@@ -245,7 +245,7 @@ export const COURSE_LIBRARY:readonly CourseLibraryFile[] = [
     "course": "مبادئ إدارة الأعمال",
     "title": "اتخاذ القرار 4",
     "kind": "lecture",
-    "order": 99,
+    "order": 4,
     "pages": 23,
     "bytes": 2087887,
     "url": "/course-library/1752e17bcba3c48ba6ed.pdf"

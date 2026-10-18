@@ -22,3 +22,6 @@ __pycache__/
 *.py[cod]
 .venv/
 python_backend/service-account*.json
+
+# Shared PDFs are reconstructed from verified source parts during build.
+public/course-library/
