@@ -1,4 +1,8 @@
 import http from 'node:http';
+import { createSignupService } from './signup.mjs';
+import { getStudentProfile } from '../src/dataExtensions.ts';
+import { speechEnabled, synthesizeSpeech } from './voice.mjs';
+import { tutorProvider, createTutorMemory } from './tutor-provider.mjs';
 import { mergeCollegeCalendar } from '../src/collegeCalendar.ts';
 import { answerTutor } from './tutor.mjs';
 import { DatabaseSync } from 'node:sqlite';
@@ -23,6 +27,8 @@ mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const db = new DatabaseSync(resolve(dataDir, 'leader.sqlite'));
 db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, owner INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS course_summaries (user_id TEXT NOT NULL, course_id TEXT NOT NULL, summary_json TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(user_id, course_id));');
 db.exec('CREATE TABLE IF NOT EXISTS recovery_codes (hash TEXT PRIMARY KEY, user_id TEXT UNIQUE NOT NULL)');
+const signup = createSignupService(db);
+const tutorMemory = createTutorMemory();
 const ownerDesign = createOwnerDesignService(db);
 const staticRoot = resolve(process.env.LEADER_STATIC_DIR || 'dist');
 const attempts = new Map();
@@ -121,8 +127,13 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('X-Frame-Options', 'DENY');
   if (path.startsWith('/api/')) {
-   if (!['GET', 'POST', 'PUT'].includes(req.method)) return json(res, 405, { error: 'طريقة الطلب غير متاحة.' });
+   if (!['GET', 'POST', 'PUT', 'DELETE'].includes(req.method)) return json(res, 405, { error: 'طريقة الطلب غير متاحة.' });
    if (req.method !== 'GET' && !validOrigin(req)) return json(res, 403, { error: 'الطلب لا يأتي من موقع التطبيق.' });
+   if (path === '/api/auth/signup-options' && req.method === 'GET') return json(res,200,{smsEnabled:signup.enabled(),minimumPasswordLength:5});
+   if (['/api/auth/check-username','/api/auth/send-otp','/api/auth/verify-otp'].includes(path) && req.method === 'POST') {
+    try{return json(res,200,await signup.handle(path,await body(req),req.socket.remoteAddress||'local'));}
+    catch(error){return json(res,error.status||400,{error:error.message});}
+   }
    if (path === '/api/auth/recover' && req.method === 'POST') {
     const ip = req.socket.remoteAddress || 'local'; const now = Date.now();
     const key = 'recovery:' + ip; let record = attempts.get(key);
@@ -142,7 +153,7 @@ const server = http.createServer(async (req, res) => {
      db.prepare('UPDATE users SET salt=?, password_hash=? WHERE id=?').run(salt,passwordHash,match.user_id);
      db.prepare('DELETE FROM sessions WHERE user_id=?').run(match.user_id); db.exec('COMMIT');
     } catch(error) { db.exec('ROLLBACK'); throw error; }
-    moodleConnections.delete(match.user_id);
+    moodleConnections.delete(match.user_id);tutorMemory.clear(match.user_id);
     await ownerDesign.removeInitialCredentials(match.user_id);
     return session(res,db.prepare('SELECT * FROM users WHERE id=?').get(match.user_id));
    }
@@ -152,12 +163,14 @@ const server = http.createServer(async (req, res) => {
     const attempt = !record || record.until < now ? { count: 0, until: now + 15 * 60 * 1000 } : record;
     attempts.set(ip, attempt); if (++attempt.count > 20) return json(res, 429, { error: 'محاولات كثيرة. انتظر قليلاً ثم حاول مجدداً.' });
     const payload = await body(req); let username = String(payload.username || '').trim().normalize('NFKC').toLowerCase(); const password = payload.password;
+    if(path.endsWith('/login')&&!username.includes('@')) username=signup.loginEmail(username)||username;
     // This technical alias is accepted only for the deliberately initialized owner account.
     if (path.endsWith('/login') && username === 'aziiz1996' && db.prepare('SELECT id FROM users WHERE username=? AND owner=1').get('aziiz1996@owner.invalid')) username = 'aziiz1996@owner.invalid';
     if (!/^[a-z0-9.!#$%&*+\/=?^_{}|~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(username) || username.length > 254 || typeof password !== 'string' || password.length < (path.endsWith('/register') ? 5 : 3) || password.length > 128) return json(res, 400, { error: 'أدخل بريداً إلكترونياً صحيحاً وكلمة مرور جديدة من ٥ خانات على الأقل.' });
     let user = db.prepare('SELECT * FROM users WHERE username=?').get(username);
     if (path.endsWith('/register')) {
      if (user) return json(res, 409, { error: 'اسم المستخدم غير متاح.' });
+     let details;try{details=signup.prepare(payload.signup,username);}catch(error){return json(res,400,{error:error.message});}
      const salt = randomBytes(16).toString('hex'); const passwordHash = Buffer.from(await scrypt(password, salt, 64)).toString('hex');
      const ownerKey = process.env.LEADER_OWNER_SETUP_KEY;
      const ownerExists = !!db.prepare('SELECT id FROM users WHERE owner=1').get();
@@ -168,7 +181,10 @@ const server = http.createServer(async (req, res) => {
      const ownerEmail=String(process.env.LEADER_OWNER_EMAIL||'').trim().normalize('NFKC').toLowerCase();
      const owner = !ownerExists && (!ownerEmail||username===ownerEmail) && (validOwnerKey || (!ownerKey && !ownerEmail && accountCount === 0));
      const id = randomUUID(); const data = emptyData(); data.settings.name = username;
-     db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?)').run(id, username, salt, passwordHash, owner ? 1 : 0, JSON.stringify(data));
+     if(details){data.settings.name=details.fullName;data.studentProfile={...getStudentProfile(data),fullName:details.fullName,email:username,phone:details.phone};}
+     db.exec('BEGIN IMMEDIATE');
+     try{db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?)').run(id,username,salt,passwordHash,owner?1:0,JSON.stringify(data));signup.save(id,details);db.exec('COMMIT');}
+     catch(error){db.exec('ROLLBACK');if(error.message.startsWith('انتهت صلاحية التحقق'))return json(res,400,{error:error.message});return json(res,409,{error:'تعذر إكمال التسجيل. قد يكون البريد أو اسم المستخدم قد استُخدم؛ تحقق من البيانات وأعد المحاولة.'});}
      user = db.prepare('SELECT * FROM users WHERE id=?').get(id);
     } else {
      const expected = user ? Buffer.from(user.password_hash, 'hex') : Buffer.alloc(64);
@@ -230,7 +246,7 @@ const server = http.createServer(async (req, res) => {
    if (path === '/api/auth/logout' && req.method === 'POST') {
     const token = /leader_session=([a-f0-9]{64})/.exec(req.headers.cookie || '')?.[1];
     if (token) db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token));
-    moodleConnections.delete(user.id);
+    moodleConnections.delete(user.id); tutorMemory.clear(user.id);
     res.setHeader('Set-Cookie', cookie('')); return json(res, 200, { ok: true });
    }
    if (path === '/api/auth/password' && req.method === 'POST') {
@@ -243,7 +259,7 @@ const server = http.createServer(async (req, res) => {
     const salt = randomBytes(16).toString('hex');
     const passwordHash = Buffer.from(await scrypt(newPassword, salt, 64)).toString('hex');
     db.prepare('UPDATE users SET salt=?, password_hash=? WHERE id=?').run(salt, passwordHash, user.id);
-    db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+    db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);tutorMemory.clear(user.id);
     db.prepare('DELETE FROM recovery_codes WHERE user_id=?').run(user.id);
     await ownerDesign.removeInitialCredentials(user.id);
     return session(res, db.prepare('SELECT * FROM users WHERE id=?').get(user.id));
@@ -288,14 +304,24 @@ const server = http.createServer(async (req, res) => {
      return json(res, 200, accountJson(updated, { connected:true, moodle:{ siteName:result.siteName, fullName:result.fullName, courseCount:result.courses.length, eventCount:result.events.length } }));
     } catch { moodleConnections.delete(user.id); return json(res, 502, { error:'تعذّرت مزامنة مودل. أعد الربط وحاول مرة أخرى.' }); }
    }
-   if (path === '/api/ai/status' && req.method === 'GET') return json(res,200,{tutorEnabled:!!process.env.OPENAI_API_KEY});
+   if (path === '/api/ai/status' && req.method === 'GET') return json(res,200,{tutorEnabled:!!tutorProvider(),provider:tutorProvider(),speechEnabled:speechEnabled()});
+   if(path==='/api/speak'&&req.method==='POST'){
+    const payload=await body(req);if(typeof payload.text!=='string'||!payload.text.trim()||payload.text.length>4000)return json(res,400,{error:'النص الصوتي يجب أن يكون من ١ إلى ٤٠٠٠ حرف.'});
+    if(!speechEnabled())return json(res,503,{error:'صوت Azure غير مفعّل؛ استخدم صوت الجهاز.'});
+    const key='speech:'+user.id,now=Date.now();let record=summaryAttempts.get(key);if(!record||record.until<now){record={count:0,until:now+86400000};summaryAttempts.set(key,record);}if(++record.count>60)return json(res,429,{error:'وصلت إلى حد الصوت السحابي اليوم. استخدم صوت الجهاز.'});
+    try{const audio=await synthesizeSpeech(payload.text);res.writeHead(200,{'Content-Type':'audio/mpeg','Cache-Control':'private, no-store'});return res.end(audio);}catch{return json(res,502,{error:'تعذر توليد الصوت. جرّب صوت الجهاز.'});}
+   }
+   if(path==='/api/ai/conversation'&&req.method==='DELETE'){tutorMemory.clear(user.id);return json(res,200,{cleared:true});}
    if (path === '/api/ai/tutor' && req.method === 'POST') {
     const payload=await body(req);const question=typeof payload.question==='string'?payload.question.trim():'';
     if(!question||question.length>4000)return json(res,400,{error:'اكتب سؤالًا من ١ إلى ٤٠٠٠ حرف.'});
     const useAI=payload.useAI===true;
     if(useAI){const key='tutor:'+user.id;const now=Date.now();let record=summaryAttempts.get(key);if(!record||record.until<now){record={count:0,until:now+86400000};summaryAttempts.set(key,record);}if(++record.count>30)return json(res,429,{error:'وصلت إلى حد الشرح الذكي اليوم؛ البحث في ملخصاتك يبقى متاحًا.'});}
-    try{return json(res,200,await answerTutor(JSON.parse(withSharedContent(user).data),question,useAI));}
+    const history=tutorMemory.begin(user.id);if(!history)return json(res,409,{error:'انتظر اكتمال الرد الحالي.'});
+    let reply;
+    try{reply=await answerTutor(JSON.parse(withSharedContent(user).data),question,useAI,history);return json(res,200,reply);}
     catch(error){return json(res,error.message==='tutor-unconfigured'?503:502,{error:error.message==='tutor-unconfigured'?'لم تُفعّل خدمة الشرح الذكي على الخادم. ألغِ اختيارها للبحث في الملخصات.':'تعذرت خدمة الشرح الذكي. يمكنك البحث في الملخصات دونها.'});}
+    finally{tutorMemory.finish(user.id,reply?.mode==='ai'?question:null,reply?.mode==='ai'?reply.answer:null,history);}
    }
    if (path === '/api/ai/course-summary' && req.method === 'POST') {
     if (!process.env.OPENAI_API_KEY) return json(res, 503, { error:'خدمة التلخيص الذكي غير مفعّلة بعد. أضف OPENAI_API_KEY في إعدادات Render.' });

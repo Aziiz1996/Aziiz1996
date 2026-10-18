@@ -1,3 +1,4 @@
+import VoiceLauncher from './VoiceLauncher';
 import { useHeaderLayout } from './headerLayout';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, BookOpen, Menu, Newspaper, ShieldCheck, UserRound, ArrowLeft, CalendarDays, Check, ChevronLeft, CircleHelp, ClipboardList, Clock3, ExternalLink, FileText, GraduationCap, LayoutDashboard, Settings2, Sparkles, Target, Wallet, AlertCircle, Users, BriefcaseBusiness } from 'lucide-react';
@@ -167,6 +168,7 @@ function Shell() {
       {page === 'owner' && <div className="page-content"><OwnerPage /></div>}
       <nav className="page-navigation" aria-label="التنقل بين الصفحات"><button className="btn btn-secondary" disabled={!canGoBack} onClick={back}><ArrowRight size={18} />عودة</button><button className="btn btn-secondary menu-button" onClick={() => setMenuOpen(true)}><Menu size={18} />القائمة</button><span className="page-navigation-current">{current.label}</span><button className="btn btn-primary" disabled={!next} onClick={() => { if (canGoForward) forward(); else if (next) navigate(next.id); }}>التالي{next && <span className="next-page-label">: {next.label}</span>}<ArrowLeft size={18} /></button></nav>
       {menuOpen && <Modal title="القائمة الرئيسية" onClose={() => setMenuOpen(false)}><div className="app-menu-intro"><strong>أهلاً {profile.fullName || 'بك يا لوجستي'} 👋</strong><p className="muted">اختر مساحتك، أو أغلق القائمة لتكمل من الصفحة نفسها.</p></div><div className="app-menu-grid">{orderedNav.map(({ id, label, icon: Icon }) => <button key={id} className={`app-menu-item ${id === page ? 'active' : ''}`} onClick={() => { navigate(id); setMenuOpen(false); }}><Icon size={24} /><span>{label}</span>{id === page && <small>أنت هنا</small>}</button>)}</div><button className="btn btn-secondary" onClick={() => setMenuOpen(false)}>العودة إلى {current.label}</button></Modal>}
+      <VoiceLauncher />
     </main>
   </div>;
 }

@@ -1,0 +1,40 @@
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { validateData } from './validation';
+import type { Session } from './AuthGate';
+
+const titles=['بياناتك','التواصل','التحقق','كلمة المرور'];
+export default function Registration({onRegistered}:{onRegistered:(session:Session)=>void}){
+ const [step,setStep]=useState(0),[fullName,setFullName]=useState(''),[handle,setHandle]=useState(''),[birthdate,setBirthdate]=useState('');
+ const [email,setEmail]=useState(''),[phone,setPhone]=useState(''),[phoneConfirm,setPhoneConfirm]=useState(''),[code,setCode]=useState(''),[challenge,setChallenge]=useState('');
+ const [password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [sms,setSms]=useState<boolean|null>(null),[availability,setAvailability]=useState(''),[availableHandle,setAvailableHandle]=useState(''),[retryAt,setRetryAt]=useState(0),[seconds,setSeconds]=useState(0);
+ const heading=useRef<HTMLHeadingElement>(null);
+ async function options(){try{const r=await fetch('/api/auth/signup-options',{cache:'no-store'});if(!r.ok)throw Error();const v=await r.json();setSms(v.smsEnabled===true);setError('');}catch{setError('تعذر معرفة حالة التسجيل. أعد المحاولة.');}}
+ useEffect(()=>{void options();},[]);
+ useEffect(()=>{heading.current?.focus();},[step]);
+ useEffect(()=>{const timer=window.setInterval(()=>setSeconds(Math.max(0,Math.ceil((retryAt-Date.now())/1000))),1000);return()=>clearInterval(timer);},[retryAt]);
+ useEffect(()=>{
+  setAvailableHandle('');if(!/^[a-z][a-z0-9_]{2,29}$/.test(handle)){setAvailability('ابدأ بحرف إنجليزي؛ من ٣ إلى ٣٠ حرفًا أو رقمًا أو شرطة سفلية.');return;}
+  const controller=new AbortController();setAvailability('جارٍ التحقق…');const timer=window.setTimeout(async()=>{try{const r=await fetch('/api/auth/check-username',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({handle}),signal:controller.signal});const v=await r.json();if(!r.ok)throw Error(v.error);if(!controller.signal.aborted){setAvailability(v.available?'اسم المستخدم متاح':'اسم المستخدم غير متاح');if(v.available)setAvailableHandle(handle);}}catch{if(!controller.signal.aborted)setAvailability('تعذر التحقق؛ أعد المحاولة بعد قليل.');}},600);
+  return()=>{clearTimeout(timer);controller.abort();};
+ },[handle]);
+ async function post(path:string,value:unknown){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});const data=await r.json();if(!r.ok)throw Error(data.error||'تعذر إكمال الطلب.');return data;}
+ async function send(){if(phone!==phoneConfirm)throw Error('رقما الجوال غير متطابقين.');const result=await post('/api/auth/send-otp',{email,phone});setChallenge(result.challenge);setCode('');setRetryAt(Date.now()+60000);setSeconds(60);setStep(2);}
+ async function advance(event:FormEvent){
+  event.preventDefault();setError('');setBusy(true);
+  try{
+   if(step===0){if(availableHandle!==handle)throw Error('اختر اسم مستخدم متاحًا قبل المتابعة.');setStep(1);}
+   else if(step===1){if(sms===null)throw Error('انتظر التحقق من خدمة التسجيل.');if(phone&&phone!==phoneConfirm)throw Error('رقما الجوال غير متطابقين.');if(phone&&sms)await send();else setStep(3);}
+   else if(step===2){const result=await post('/api/auth/verify-otp',{challenge,code});if(!result.valid)throw Error(result.error||'الرمز غير صحيح.');setStep(3);}
+   else{if(password!==confirm)throw Error('كلمتا المرور غير متطابقتين.');const result=await post('/api/auth/register',{username:email,password,signup:{fullName,handle,birthdate,phone,challenge}});if(!result.user||!validateData(result.data))throw Error('استجابة التسجيل غير صالحة.');setPassword('');setConfirm('');onRegistered(result);}
+  }catch(e){setError(e instanceof Error?e.message:'تعذر إكمال التسجيل.');}finally{setBusy(false);}
+ }
+ const score=Math.min(4,(password.length>=5?1:0)+(password.length>=10?1:0)+(/[\p{L}]/u.test(password)&&/\d/.test(password)?1:0)+(/[^\p{L}\p{N}]/u.test(password)?1:0));
+ return <section className="registration"><ol className="signup-progress" aria-label="خطوات إنشاء الحساب">{titles.map((title,i)=><li key={title} aria-current={step===i?'step':undefined} className={i<=step?'reached':''}><span>{i+1}</span><small>{title}</small></li>)}</ol>
+ <form className="stack" onSubmit={advance}><h2 ref={heading} tabIndex={-1}>{titles[step]}</h2>
+ {step===0&&<><label>الاسم الكامل<input autoComplete="name" required minLength={2} maxLength={80} value={fullName} onChange={e=>setFullName(e.target.value)}/></label><label>اسم المستخدم<input dir="ltr" autoComplete="username" required pattern="[a-z][a-z0-9_]{2,29}" maxLength={30} value={handle} onChange={e=>setHandle(e.target.value.toLowerCase())} aria-describedby="handle-status"/></label><p id="handle-status" className="field-hint" role="status">{availability}</p><label>تاريخ الميلاد <small>اختياري، يُحفظ داخل حسابك</small><input type="date" min="1900-01-01" max={new Date().toISOString().slice(0,10)} value={birthdate} onChange={e=>setBirthdate(e.target.value)}/></label></>}
+ {step===1&&<><label>البريد الإلكتروني<input type="email" dir="ltr" autoComplete="email" required maxLength={254} value={email} onChange={e=>{setEmail(e.target.value);setChallenge('');}}/></label><label>رقم الجوال <small>اختياري</small><input type="tel" dir="ltr" autoComplete="tel" placeholder="05xxxxxxxx أو +9665xxxxxxxx" maxLength={24} value={phone} onChange={e=>{setPhone(e.target.value);setChallenge('');}}/></label>{phone&&<label>تأكيد رقم الجوال<input type="tel" dir="ltr" required maxLength={24} value={phoneConfirm} onChange={e=>setPhoneConfirm(e.target.value)}/></label>}<p className="field-hint">{sms===null?'جارٍ التحقق من خدمة التسجيل…':sms?'عند إضافة جوالك نرسل رمزًا للتحقق منه. يبقى الدخول بالبريد أو اسم المستخدم وكلمة المرور.':'التحقق برسائل الجوال غير مفعّل حاليًا. يمكنك التسجيل بالبريد؛ لن نعرض رقمك كرقم موثّق.'}</p>{sms===null&&<button type="button" className="btn btn-secondary" onClick={()=>void options()}>إعادة التحقق من الخدمة</button>}</>}
+ {step===2&&<><p>أُرسل رمز التحقق إلى {phone}. تنتهي صلاحية الطلب خلال ١٠ دقائق.</p><label>رمز التحقق<input inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{4,10}" maxLength={10} value={code} onChange={e=>setCode(e.target.value)}/></label><button type="button" className="btn btn-secondary" disabled={busy||seconds>0} onClick={()=>{setBusy(true);setError('');void send().catch(e=>setError(e.message)).finally(()=>setBusy(false));}}>{seconds>0?`إعادة الإرسال بعد ${seconds} ثانية`:'إعادة إرسال الرمز'}</button></>}
+ {step===3&&<><p>حسابك باسم <strong>{handle}</strong>. يمكنك الدخول بالبريد أو اسم المستخدم.</p><label>كلمة المرور<input type="password" autoComplete="new-password" required minLength={5} maxLength={128} value={password} onChange={e=>setPassword(e.target.value)}/></label><meter min={0} max={4} value={score} aria-label="قوة كلمة المرور"/><p className="field-hint">٥ خانات على الأقل. الكلمات الأطول أصعب في التخمين؛ الحروف والرموز اختيارية.</p><label>تأكيد كلمة المرور<input type="password" autoComplete="new-password" required minLength={5} maxLength={128} value={confirm} onChange={e=>setConfirm(e.target.value)}/></label>{confirm&&<p role="status">{password===confirm?'كلمتا المرور متطابقتان':'كلمتا المرور غير متطابقتين'}</p>}</>}
+ {error&&<p className="notice danger" role="alert">{error}</p>}<div className="row">{step>0&&<button type="button" className="btn btn-secondary" disabled={busy} onClick={()=>{setError('');setStep(step===3?1:step-1);}}>السابق</button>}<button className="btn btn-primary" disabled={busy||(step===1&&sms===null)}>{busy?'جارٍ المتابعة…':step===3?'إنشاء حسابي':step===1&&phone&&sms?'إرسال الرمز والمتابعة':step===2?'تأكيد الرمز':'التالي'}</button></div></form></section>;
+}
