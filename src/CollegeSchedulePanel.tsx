@@ -1,0 +1,18 @@
+import { COLLEGE_CALENDAR, calendarCourse, mergeCollegeCalendar } from './collegeCalendar';
+import { useApp, downloadFile } from './store';
+import { buildStudyCalendar } from './calendarTools';
+import { enableAcademicReminders } from './reminders';
+import { syncNativeCalendar } from './nativeCalendar';
+import { useState } from 'react';
+
+export default function CollegeSchedulePanel(){
+ const {data,replace,notify,accountId}=useApp();const [busy,setBusy]=useState(false);
+ function apply(id?:string){try{const result=mergeCollegeCalendar(data,id);if(!replace(result.data))throw Error();notify(`حُفظت المواعيد: ${result.added} جديدة و${result.updated} مكتملة الوقت. ${result.conflicts.length?'بقيت المواعيد المتعارضة كما حفظتها؛ راجعها أدناه.':''}`);}catch{notify('تعذر حفظ المواعيد؛ بقيت بيانات حسابك محفوظة.');}}
+ async function calendar(){setBusy(true);try{await syncNativeCalendar(data,accountId);notify('تمت مزامنة تقويم الجهاز.');}catch(e){if(e instanceof Error&&e.message==='WEB_CALENDAR'){downloadFile('az-logistics-calendar.ics',buildStudyCalendar(data),'text/calendar;charset=utf-8');notify('افتح ملف التقويم المنزّل لإضافته إلى تقويم جهازك مع التنبيهات.');}else notify('تعذرت مزامنة التقويم. تحقق من إذن التقويم أو نزّل ملف ICS.');}finally{setBusy(false);}}
+ return <section className="card stack" aria-label="تقويم الكلية المشترك"><div><span className="eyebrow">الجداول والتقويم والتنبيهات</span><h2>مواعيد الكلية من مودل</h2><p className="muted">تصدير ١٧ أكتوبر ٢٠٢٦ · بتوقيت السعودية. نوافذ إتاحة الاختبارات لا تعني مدة محاولة الاختبار. الجدول الأسبوعي أعلاه من الجدول الذي شاركه المستخدم؛ راجع تغييرات الكلية.</p></div>
+  <div className="notice notice-warning">موعد المشتريات في تصدير مودل ٢٢ أكتوبر من ٨:٠٠ إلى ٩:١٥ صباحًا، ويختلف عن الجدول السابق ٩:١٥ مساءً. يبقى وقتك المحفوظ حتى تعتمد التغيير صراحةً. الواجب مستحق عند بداية ٣٠ نوفمبر، الساعة ٠٠:٠٠.</div>
+  <details><summary>عرض مواعيد الاختبارات والواجب</summary><ul className="course-file-list">{COLLEGE_CALENDAR.map(event=>{const course=calendarCourse(data,event.courseId!,event.courseName);const task=data.tasks.find(t=>t.courseId===course?.id&&t.due===event.date&&t.kind===event.kind);const conflict=!!task?.time&&task.time!==event.time||!!task?.endTime&&!!event.endTime&&task.endTime!==event.endTime;return <li key={event.id}><div><strong>{event.title}</strong><p className="muted"><time dateTime={event.date+'T'+event.time+':00+03:00'}>{event.date} · {event.time}{event.endTime?' — '+event.endTime:''} بتوقيت السعودية</time></p>{conflict&&<p className="notice notice-warning">موعد حسابك: {task?.time} {task?.endTime?'— '+task.endTime:''}</p>}</div>{conflict&&<button className="btn btn-secondary" onClick={()=>apply(event.id)}>اعتماد وقت مودل لهذه المادة</button>}</li>;})}</ul></details>
+  <div className="row"><button className="btn btn-primary" onClick={()=>apply()}>تثبيت المواعيد وإكمال الأوقات الناقصة</button><button disabled={busy} className="btn btn-secondary" onClick={()=>void calendar()}>مزامنة تقويم الهاتف</button><button className="btn btn-secondary" onClick={()=>downloadFile('az-logistics-calendar.ics',buildStudyCalendar(data),'text/calendar;charset=utf-8')}>تنزيل التقويم مع التنبيهات</button><button disabled={busy} className="btn btn-secondary" onClick={()=>{setBusy(true);void enableAcademicReminders(data).then(notify).catch(()=>notify('تعذر تفعيل التنبيهات.')).finally(()=>setBusy(false));}}>تفعيل تنبيهات المواعيد</button></div>
+  <p className="muted">تظهر المواعيد في حسابك وخطة المذاكرة، ويضم التقويم المحاضرات الأسبوعية. يحتاج تقويم الهاتف والتنبيهات إذن الجهاز؛ في المتصفح افتح ملف ICS المنزّل. لا تُفعّل التنبيهات تلقائيًا دون إذنك.</p>
+ </section>;
+}

@@ -6,6 +6,7 @@ import { buildStudyCalendar, parseMoodleCalendar } from './calendarTools';
 import { todayISO } from './logic';
 import { enableAcademicReminders } from './reminders';
 import { syncNativeCalendar } from './nativeCalendar';
+import CollegeCalendar from './CollegeSchedulePanel';
 
 export default function UniversityPage() {
   const { data, update, notify, replace, accountId } = useApp();
@@ -66,6 +67,7 @@ export default function UniversityPage() {
   }
   return <div className="page-content stack">
     <SectionHeader eyebrow="جامعتك في مكان واحد" title="الجامعة — الكلية التطبيقية" description="روابط الجامعة ومودل وتقويم دبلوم سلاسل الإمداد." />
+    <CollegeCalendar />
     <div className="note-grid">
       <section className="card stack"><GraduationCap size={28} /><h2>موقع الجامعة السعودية الإلكترونية</h2><p>راجع أخبار الجامعة وخدماتها ومعلومات القبول والكلية التطبيقية من الموقع.</p><a className="btn btn-primary" href="https://seu.edu.sa/" target="_blank" rel="noopener noreferrer"><ExternalLink size={18} />فتح موقع الجامعة</a></section>
       <section className="card stack"><BookOpen size={28} /><h2>منصة الدراسة — مودل</h2><p>افتح رابط منصة الدراسة الذي أرسلته وسجّل دخولك لدى المنصة لعرض موادك.</p><a className="btn btn-primary" href="https://lms.ac-seu.com/login/index.php?loginredirect=1" target="_blank" rel="noopener noreferrer"><ExternalLink size={18} />فتح منصة الدراسة</a></section>

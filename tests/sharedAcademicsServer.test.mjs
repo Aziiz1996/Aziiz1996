@@ -66,9 +66,14 @@ function assertStarter(data) {
   assert.ok(PROVIDED_MATERIALS.summaries.every(summary => data.notes.some(note => note.id === summary.id)));
   assert.ok(PROVIDED_MATERIALS.quizzes.every(quiz => data.quizzes.some(item => item.id === quiz.id)));
   for (const source of SHARED_ACADEMIC_CATALOG.lectures) assert.deepEqual(data.lectures.find(lecture => lecture.id === source.id), source);
-  for (const source of SHARED_ACADEMIC_CATALOG.exams) assert.deepEqual(data.tasks.find(task => task.id === source.id), source);
+  const clocks={'exam-supply':['19:00','20:30'],'exam-business':['20:00','21:30'],'exam-transport':['20:00','21:00']};
+  for (const source of SHARED_ACADEMIC_CATALOG.exams) {
+    const expected={...source};if(clocks[source.id]){delete expected.timePending;[expected.time,expected.endTime]=clocks[source.id];}
+    assert.deepEqual(data.tasks.find(task => task.id === source.id), expected);
+  }
   assert.equal(data.lectures.find(lecture => lecture.id === 'lecture-inventory').end, '');
-  for (const id of ['exam-supply', 'exam-business', 'exam-transport']) assert.equal(data.tasks.find(task => task.id === id).time, undefined);
+  for (const [id,clock] of Object.entries(clocks)) assert.equal(data.tasks.find(task => task.id === id).time, clock[0]);
+  assert.equal(data.tasks.filter(task=>task.kind==='assignment').length,1);
   assert.equal(data.tasks.find(task => task.id === 'exam-procurement').endTime, undefined);
 }
 
@@ -147,7 +152,7 @@ test('shared academics migrate existing SQLite accounts and stay independent fro
       const first = await request('/api/auth/session', { cookie:registered.cookie });
       const second = await request('/api/auth/session', { cookie:registered.cookie });
       assert.deepEqual(first.json.data, personal); assert.deepEqual(second.json.data, personal);
-      assert.equal(second.json.data.lectures.length, 5); assert.equal(second.json.data.tasks.length, 5);
+      assert.equal(second.json.data.lectures.length, 5); assert.equal(second.json.data.tasks.length, 6);
       const login = await request('/api/auth/login', { method:'POST', value:{ username:'new-academic-member@example.test', password:PASSWORD } });
       assert.equal(login.response.status, 200); assert.deepEqual(login.json.data, personal);
       const catalog = await request('/api/academic/shared', { cookie:login.cookie });

@@ -1941,3 +1941,10 @@ summary:focus-visible { outline: 3px solid #CBD5E1; outline-offset: 3px; border-
   .main:has(> .page-navigation) { padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
   #teacher-mode-panel > .stack form > textarea { font-size: 16px; }
 }
+
+.course-file-group > summary { cursor:pointer; font-weight:700; padding:12px 0; }
+.course-file-list { list-style:none; margin:12px 0; padding:0; display:grid; gap:12px; }
+.course-file-list > li { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:14px; border:1px solid var(--line,#e7e2ee); border-radius:14px; min-width:0; }
+.course-file-list strong { overflow-wrap:anywhere; }
+.course-file-list p { margin:6px 0 0; }
+@media(max-width:760px) { .course-file-list .row { flex-wrap:wrap; } }

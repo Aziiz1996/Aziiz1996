@@ -5,6 +5,7 @@ import { CourseBadge, EmptyState, Field, Modal, SectionHeader } from './ui';
 import { formatDate, summarizeText, todayISO } from './logic';
 import type { Note } from './types';
 import ProvidedLibrary from './ProvidedLibrary';
+import CourseFiles from './CourseFiles';
 import MaterialImport from './MaterialImport';
 import StudyLibrary from './StudyLibrary';
 
@@ -124,6 +125,7 @@ export default function NotesPage({ initialCourseId }: { initialCourseId?: strin
     finally { setAiBusy(false); }
   }
   return <div className="page-content">
+    <CourseFiles courseId={initialCourseId} />
     <ProvidedLibrary courseId={initialCourseId} />
     {!initialCourseId && <><MaterialImport /><StudyLibrary /></>}
     <SectionHeader eyebrow="معرفتك، مرتّبة" title="ملخصات المواد" description="احتفظ بنصوص المحاضرات، واستخرج منها ملخصات أولية تراجعها بأسلوبك." action={<div className="row"><button className="btn btn-secondary" disabled={!data.courses.length} onClick={() => { setAiCourseId(data.courses[0]?.id ?? ''); setAiError(''); setAiOpen(true); }}><Sparkles size={18} />ملخص ذكي للمادة</button><button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={18} />إضافة ملاحظة</button></div>} />

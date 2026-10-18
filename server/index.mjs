@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { mergeCollegeCalendar } from '../src/collegeCalendar.ts';
 import { answerTutor } from './tutor.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, randomUUID, createHash, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
@@ -46,7 +47,8 @@ function withSharedContent(user) {
  data.lectures = data.lectures.filter(lecture => !isLessonTemplate(lecture));
  let sharedData = data;
  // Each addition is atomic; an account at capacity remains accessible with its valid personal data.
- try { sharedData = mergeSharedAcademics(sharedData).data; } catch {}
+  try { sharedData = mergeSharedAcademics(sharedData).data; } catch {}
+  try { sharedData = mergeCollegeCalendar(sharedData).data; } catch {}
  const courseId = sharedData.courses.find(course => course.id === 'inventory-management' || course.id === 'inventory')?.id
   ?? sharedData.courses.find(course => course.name.normalize('NFKC').replace(/[إأآ]/g, 'ا').replace(/[\u064B-\u065Fـ]/g, '').includes('ادارة المخزون والمخازن'))?.id;
  if (courseId) {
