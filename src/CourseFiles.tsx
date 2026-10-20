@@ -4,6 +4,52 @@ import { TRANSPORT_QUESTIONS } from './transportQuestions';
 import { useApp } from './store';
 import { useEffect, useState } from 'react';
 
+const APPROVED_TRANSPORT_SUMMARIES = [
+ { title:'المحاضرة الأولى | مقدمة في النقل والشحن الدولي', content:`وش النقل الدولي؟
+نقل البضائع أو الأشخاص من دولة لدولة بوسائل النقل المختلفة مع الالتزام بالأنظمة والجمارك
+
+وش الشحن الدولي؟
+تجهيز البضاعة وتوثيقها وجدولة شحنها بين الدول ويشمل العقود والمستندات وشروط التسليم وتتبع الشحنة
+
+وش الفرق بين إدارة النقل وإدارة الشحن؟
+إدارة النقل تخطط وتنظم وتراقب حركة البضاعة وتختار وسيلة النقل المناسبة
+إدارة الشحن تتابع العقود ووثائق الشحن والتخليص الجمركي والتأمين
+
+أطراف النقل الرئيسية
+الشاحن يطلب نقل البضاعة
+الناقل ينفذ عملية النقل
+ملاك ومشغلو البنية التحتية يوفرون الطرق والموانئ والمطارات
+
+وش أهمية النقل؟
+يربط أماكن الإنتاج بالأسواق ويسهل التجارة الداخلية والخارجية
+وذكرت المحاضرة إن النقل يشكل تقريبا ثلث التكاليف اللوجستية` },
+ { title:'المحاضرة الثانية | أنواع النقل الدولي', content:`وسائل النقل الرئيسية عددها 5
+البري والسكك الحديدية والبحري والجوي والأنابيب
+
+وش النقل البري؟
+نقل البضاعة والركاب بالمركبات على الطرق داخل الدولة أو بين الدول
+
+مميزاته عددها 3 حسب المحاضرة
+المرونة والسرعة النسبية وإمكانية نقل الشحنات الصغيرة
+
+عيوبه عددها 6
+الأحوال الجوية ومحدودية الحمولة وارتفاع الوقود والصيانة والحوادث والتلوث وازدحام الطرق
+
+وش النقل بالسكك الحديدية؟
+نقل الركاب والبضاعة بقطارات تمشي على قضبان ثابتة
+
+وش يميزه؟
+ينقل كميات كبيرة لمسافات طويلة بتكلفة اقتصادية نسبيا
+
+فروقات مهمة للاختبار
+تجهيز الوثائق والتخليص: إدارة الشحن
+اختيار وسيلة النقل ومراقبة الحركة: إدارة النقل
+طلب نقل البضاعة: الشاحن
+تنفيذ النقل: الناقل
+التوصيل من الباب للباب: النقل البري
+نقل كميات كبيرة على قضبان: السكك الحديدية` }
+] as const;
+
 const normalize=(s:string)=>s.normalize('NFKC').replace(/[إأآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^\p{L}\p{N}]/gu,'');
 export default function CourseFiles({courseId}:{courseId?:string}) {
  const {data}=useApp();const course=data.courses.find(c=>c.id===courseId);
@@ -16,6 +62,6 @@ export default function CourseFiles({courseId}:{courseId?:string}) {
  return <section className="card stack" aria-label="مكتبة ملفات المحاضرات">
   <div><span className="eyebrow">لكل الحسابات</span><h2>ملفات المحاضرات والمراجع</h2><p className="muted">محاضرات PDF مرتبة حسب المادة، مع التوصيفات وأدلة الكلية. النسخ المكررة غير معروضة. بعض الملفات كبيرة وقد يستغرق فتحها وقتًا.</p></div>
   {files.some(f=>!ready.includes(f.url))&&<p className="notice" role="status">بعض ملفات PDF بانتظار اكتمال الرفع. الملفات المنشورة تظهر بأزرار الفتح والتنزيل؛ تظل الملخصات النصية متاحة.</p>}
-  {groups.map(group=><details key={group} open={!!courseId} className="course-file-group"><summary>{group} · {files.filter(f=>f.course===group).length} ملفات</summary><ul className="course-file-list">{files.filter(f=>f.course===group).sort((a,b)=>({lecture:0,syllabus:1,reference:2}[a.kind]-{lecture:0,syllabus:1,reference:2}[b.kind])||a.order-b.order||a.title.localeCompare(b.title,'ar',{numeric:true})).map(f=><li key={f.id}><div><strong>{f.title}</strong><p className="muted">{f.kind==='lecture'?'محاضرة':f.kind==='syllabus'?'توصيف المقرر':'مرجع الكلية'} · {f.pages} صفحة · {(f.bytes/1048576).toFixed(1)} م.ب.</p></div><div className="row">{ready.includes(f.url)?<><a className="btn btn-secondary" href={f.url} target="_blank" rel="noopener noreferrer" aria-label={'فتح '+f.title}>فتح PDF</a><a className="btn btn-ghost" href={f.url} download={f.title+'.pdf'} aria-label={'تنزيل '+f.title}>تنزيل</a></>:<button className="btn btn-secondary" disabled>بانتظار رفع الملف</button>}</div></li>)}</ul>{summaries.filter(item=>normalize(item.courseName)===normalize(group)).map(item=><details key={item.id} className="card stack"><summary>ملخص: {item.title}</summary><p className="preserve-lines">{item.content}</p></details>)}{normalize(group)===normalize('إدارة النقل والشحن الدولي')&&<details className="card stack"><summary>أسئلة اختيارات — النقل والشحن الدولي ({TRANSPORT_QUESTIONS.length} سؤال)</summary><p>أسئلة تدريبية وليست اختبارًا رسميًا</p>{TRANSPORT_QUESTIONS.map((q,i)=><details key={i}><summary>{i+1}. {q.question}</summary><ol>{q.options.map((option,j)=><li key={j}>{option}</li>)}</ol><p>الإجابة: {q.options[q.correct]}</p><p>{q.explanation}</p></details>)}</details>}</details>)}
+  {groups.map(group=><details key={group} open={!!courseId} className="course-file-group"><summary>{group} · {files.filter(f=>f.course===group).length} ملفات</summary><ul className="course-file-list">{files.filter(f=>f.course===group).sort((a,b)=>({lecture:0,syllabus:1,reference:2}[a.kind]-{lecture:0,syllabus:1,reference:2}[b.kind])||a.order-b.order||a.title.localeCompare(b.title,'ar',{numeric:true})).map(f=><li key={f.id}><div><strong>{f.title}</strong><p className="muted">{f.kind==='lecture'?'محاضرة':f.kind==='syllabus'?'توصيف المقرر':'مرجع الكلية'} · {f.pages} صفحة · {(f.bytes/1048576).toFixed(1)} م.ب.</p></div><div className="row">{ready.includes(f.url)?<><a className="btn btn-secondary" href={f.url} target="_blank" rel="noopener noreferrer" aria-label={'فتح '+f.title}>فتح PDF</a><a className="btn btn-ghost" href={f.url} download={f.title+'.pdf'} aria-label={'تنزيل '+f.title}>تنزيل</a></>:<button className="btn btn-secondary" disabled>بانتظار رفع الملف</button>}</div></li>)}</ul>{summaries.filter(item=>normalize(item.courseName)===normalize(group)).map(item=><details key={item.id} className="card stack"><summary>ملخص: {item.title}</summary><p className="preserve-lines">{item.content}</p></details>)}{normalize(group)===normalize('إدارة النقل والشحن الدولي')&&APPROVED_TRANSPORT_SUMMARIES.map(item=><details key={item.title} className="card stack"><summary>ملخص: {item.title}</summary><p className="preserve-lines">{item.content}</p></details>)}{normalize(group)===normalize('إدارة النقل والشحن الدولي')&&<details className="card stack"><summary>أسئلة اختيارات — النقل والشحن الدولي ({TRANSPORT_QUESTIONS.length} سؤال)</summary><p>أسئلة تدريبية وليست اختبارًا رسميًا</p>{TRANSPORT_QUESTIONS.map((q,i)=><details key={i}><summary>{i+1}. {q.question}</summary><ol>{q.options.map((option,j)=><li key={j}>{option}</li>)}</ol><p>الإجابة: {q.options[q.correct]}</p><p>{q.explanation}</p></details>)}</details>}</details>)}
  </section>;
 }
