@@ -224,7 +224,7 @@ const server = http.createServer(async (req, res) => {
     db.prepare('INSERT INTO project_memberships(user_id,group_number) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET group_number=excluded.group_number').run(member.id,group);
     return json(res,200,{assigned:true,group});
    }
-   const projectMatch=path.match(new RegExp('^/api/projects/([0-9]+)/file
+   const projectMatch = /^\/api\/projects\/([0-9]+)\/file$/.exec(path);
    if(projectMatch){
     const group=Number(projectMatch[1]),membership=db.prepare('SELECT group_number FROM project_memberships WHERE user_id=?').get(user.id);
     if(!projectNumbers.has(group))return json(res,404,{error:'المجموعة غير موجودة.'});
