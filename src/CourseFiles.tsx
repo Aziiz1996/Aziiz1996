@@ -1,4 +1,6 @@
 import { COURSE_LIBRARY } from './courseLibrary';
+import { PROVIDED_MATERIALS } from './providedMaterials';
+import { TRANSPORT_QUESTIONS } from './transportQuestions';
 import { useApp } from './store';
 import { useEffect, useState } from 'react';
 
@@ -9,6 +11,7 @@ export default function CourseFiles({courseId}:{courseId?:string}) {
  useEffect(()=>{const controller=new AbortController();fetch('/course-library/manifest.json',{signal:controller.signal,cache:'no-cache'}).then(r=>r.ok?r.json():null).then(value=>setReady(value?.version===1&&Array.isArray(value.files)?value.files.filter((url:unknown):url is string=>typeof url==='string'&&COURSE_LIBRARY.some(f=>f.url===url)):[])).catch(()=>{});return()=>controller.abort();},[]);
  const files=COURSE_LIBRARY.filter(f=>!courseId||(course&&normalize(course.name).includes(normalize(f.course))));
  const groups=[...new Set(files.map(f=>f.course))];
+ const summaries=PROVIDED_MATERIALS.summaries;
  if(!files.length)return null;
  return <section className="card stack" aria-label="مكتبة ملفات المحاضرات">
   <div><span className="eyebrow">لكل الحسابات</span><h2>ملفات المحاضرات والمراجع</h2><p className="muted">محاضرات PDF مرتبة حسب المادة، مع التوصيفات وأدلة الكلية. النسخ المكررة غير معروضة. بعض الملفات كبيرة وقد يستغرق فتحها وقتًا.</p></div>
