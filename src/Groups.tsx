@@ -4,6 +4,7 @@ import { useApp } from './store';
 import { useAuth } from './auth';
 import { Field, Modal, SectionHeader } from './ui';
 import type { ProjectGroup } from './types';
+import { PROJECT_GROUP_CATALOG } from './projectGroupCatalog';
 
 export default function GroupsPage() {
   const { data, update, notify } = useApp();
@@ -72,6 +73,15 @@ export default function GroupsPage() {
           </div>}
         </div>}
       </div>:<p>{privateError||'جاري التحقق من صلاحية الدخول...'}</p>}
+    </section>
+    <section className="stack">
+      <h2>توزيع مجموعات إدارة المخزون والمخازن</h2>
+      <p>١١ مجموعة حسب جدول توزيع الطلاب. المجموعة ٤ غير مدرجة في المصدر. عرض الأسماء هنا لا يمنح صلاحية فتح ملف مجموعة ٣ الخاص.</p>
+      <div className="note-grid">{PROJECT_GROUP_CATALOG.map(item=><article className="card stack" key={item.group}>
+        <h3>مجموعة {item.group}</h3>
+        <p><strong>{item.topic}</strong></p><p>{item.week} — {item.members.length} أعضاء</p>
+        <details><summary>عرض أسماء الأعضاء</summary><ul>{item.members.map(member=><li key={member}>{member}</li>)}</ul></details>
+      </article>)}</div>
     </section>
     <p className="notice">المجموعات محفوظة على جهازك. دعوة الأعضاء والمحادثة والمزامنة بينهم غير متاحة في هذه النسخة.</p>
     {!groups.length && <section className="card stack"><Users size={32} /><h2>أضف أول مجموعة مشروع</h2><p>يمكنك إنشاء أكثر من مجموعة وفتح تفاصيل كل واحدة.</p></section>}
