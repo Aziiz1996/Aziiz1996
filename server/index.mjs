@@ -27,6 +27,12 @@ mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const db = new DatabaseSync(resolve(dataDir, 'leader.sqlite'));
 db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, password_hash TEXT NOT NULL, owner INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS course_summaries (user_id TEXT NOT NULL, course_id TEXT NOT NULL, summary_json TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(user_id, course_id));');
 db.exec('CREATE TABLE IF NOT EXISTS recovery_codes (hash TEXT PRIMARY KEY, user_id TEXT UNIQUE NOT NULL)');
+
+// Private Group 3: authorization is enforced for every API read and write.
+db.exec("CREATE TABLE IF NOT EXISTS group3_members (user_id TEXT PRIMARY KEY, display_name TEXT NOT NULL, leader INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS group3_document (id INTEGER PRIMARY KEY CHECK(id=1), filename TEXT NOT NULL, bytes BLOB NOT NULL)");
+const group3Names = ['هدى وحيد أمين','دلال حسين المالكي','مريع عبدالله القحطاني','سعود محمد الأحمدي','بدور عبدالله المالكي','راوية عبدالله العواس','تركي خالد العتيبي','لارا حسن خنفور'];
+function group3Allowed(user) { return !!user && (!!user.owner || !!db.prepare('SELECT 1 FROM group3_members WHERE user_id=?').get(user.id)); }
+
 const signup = createSignupService(db);
 const tutorMemory = createTutorMemory();
 const ownerDesign = createOwnerDesignService(db);
