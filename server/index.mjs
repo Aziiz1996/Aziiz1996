@@ -20,6 +20,7 @@ import { connectMoodle, syncMoodle } from './moodle.mjs';
 import { generateAcademicSummary } from './openai.mjs';
 import { createOwnerDesignService } from './owner-design.mjs';
 import { handleNewsRequest } from './news.mjs';
+import { PROJECT_GROUP_CATALOG } from '../src/projectGroupCatalog.ts';
 
 const scrypt = promisify(scryptCallback);
 const dataDir = resolve(process.env.LEADER_DATA_DIR || '.leader-data');
@@ -30,7 +31,8 @@ db.exec('CREATE TABLE IF NOT EXISTS recovery_codes (hash TEXT PRIMARY KEY, user_
 
 // Private Group 3: authorization is enforced for every API read and write.
 db.exec("CREATE TABLE IF NOT EXISTS group3_members (user_id TEXT PRIMARY KEY, display_name TEXT NOT NULL, leader INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS group3_document (id INTEGER PRIMARY KEY CHECK(id=1), filename TEXT NOT NULL, bytes BLOB NOT NULL)");
-const group3Names = ['هدى وحيد أمين','دلال حسين المالكي','مريع عبدالله القحطاني','سعود محمد الأحمدي','بدور عبدالله المالكي','راوية عبدالله العواس','تركي خالد العتيبي','لارا حسن خنفور'];
+db.exec('CREATE TABLE IF NOT EXISTS project_memberships (user_id TEXT PRIMARY KEY, group_number INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS project_documents (group_number INTEGER PRIMARY KEY, filename TEXT NOT NULL, bytes BLOB NOT NULL, updated_by TEXT NOT NULL, updated_at TEXT NOT NULL)');
+const projectNumbers=new Set(PROJECT_GROUP_CATALOG.map(g=>g.group));
 function group3Allowed(user) { return !!user && (!!user.owner || !!db.prepare('SELECT 1 FROM group3_members WHERE user_id=?').get(user.id)); }
 
 const signup = createSignupService(db);
@@ -208,6 +210,40 @@ const server = http.createServer(async (req, res) => {
    }
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
+   if(path==='/api/projects'&&req.method==='GET'){
+    const member=db.prepare('SELECT group_number FROM project_memberships WHERE user_id=?').get(user.id);
+    const permitted=user.owner?PROJECT_GROUP_CATALOG:PROJECT_GROUP_CATALOG.filter(g=>g.group===member?.group_number);
+    return json(res,200,{suggestions:PROJECT_GROUP_CATALOG.map(g=>({group:g.group,topic:g.topic,week:g.week})),assignedGroup:member?.group_number||null,owner:!!user.owner,documents:permitted.map(g=>({group:g.group,topic:g.topic,document:db.prepare('SELECT filename,length(bytes) AS size,updated_at FROM project_documents WHERE group_number=?').get(g.group)||null}))});
+   }
+   if(path==='/api/projects/assign'&&req.method==='POST'){
+    if(!user.owner)return json(res,403,{error:'تعيين الأعضاء للمسؤول فقط.'});
+    const payload=await body(req),group=Number(payload.group),username=String(payload.username||'').trim().normalize('NFKC').toLowerCase();
+    if(!projectNumbers.has(group)||!username||username.length>254)return json(res,400,{error:'المجموعة أو الحساب غير صالح.'});
+    const member=db.prepare('SELECT id,owner FROM users WHERE username=?').get(username);
+    if(!member||member.owner)return json(res,404,{error:'حساب الطالب غير موجود.'});
+    db.prepare('INSERT INTO project_memberships(user_id,group_number) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET group_number=excluded.group_number').run(member.id,group);
+    return json(res,200,{assigned:true,group});
+   }
+   const projectMatch=/^\\/api\\/projects\\/(\\d+)\\/file$/.exec(path);
+   if(projectMatch){
+    const group=Number(projectMatch[1]),membership=db.prepare('SELECT group_number FROM project_memberships WHERE user_id=?').get(user.id);
+    if(!projectNumbers.has(group))return json(res,404,{error:'المجموعة غير موجودة.'});
+    if(!user.owner&&membership?.group_number!==group)return json(res,403,{error:'الملف خاص بأعضاء المجموعة.'});
+    if(req.method==='GET'){
+     const file=db.prepare('SELECT bytes FROM project_documents WHERE group_number=?').get(group);
+     if(!file)return json(res,404,{error:'لا يوجد ملف مرفوع.'});
+     res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'inline; filename="project.pdf"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return res.end(file.bytes);
+    }
+    if(req.method==='POST'){
+     const payload=await body(req),encoded=payload.data;
+     if(typeof encoded!=='string'||encoded.length>7_100_000||!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))return json(res,400,{error:'ملف PDF غير صالح أو كبير.'});
+     const bytes=Buffer.from(encoded,'base64');
+     if(bytes.length<8||bytes.length>5*1024*1024||bytes.subarray(0,5).toString()!=='%PDF-')return json(res,400,{error:'PDF مطلوب بحجم أقل من 5 ميغابايت.'});
+     db.prepare('INSERT INTO project_documents(group_number,filename,bytes,updated_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(group_number) DO UPDATE SET filename=excluded.filename,bytes=excluded.bytes,updated_by=excluded.updated_by,updated_at=excluded.updated_at').run(group,'project.pdf',bytes,user.id,new Date().toISOString());
+     return json(res,200,{saved:true,group,size:bytes.length});
+    }
+    return json(res,405,{error:'طريقة غير متاحة.'});
+   }
    if (path === '/api/academic/shared' && req.method === 'GET') return json(res, 200, { catalog:SHARED_ACADEMIC_CATALOG, materials:PROVIDED_MATERIALS, reviewLessons:LOGISTICS_LESSONS });
    if (path === '/api/news' && req.method === 'GET' && await handleNewsRequest(req, res)) return;
    if (path === '/api/design' && req.method === 'GET') return json(res, 200, ownerDesign.getDesign());
