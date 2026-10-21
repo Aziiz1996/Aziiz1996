@@ -46,7 +46,7 @@ test('unapproved students cannot read academic APIs, group files, or direct PDF 
  assert.equal((await req('/api/projects/3/file',{cookie:a.cookie})).status,200);
  assert.equal((await req('/api/projects/3/file',{cookie:owner.cookie})).status,200);
  assert.equal((await req('/api/projects/3/file',{cookie:b.cookie})).status,403,'unapproved IDOR');
- assert.equal((await req('/api/projects/4/file',{cookie:a.cookie})).status,403,'approved IDOR');
+ assert.equal((await req('/api/projects/2/file',{cookie:a.cookie})).status,403,'approved IDOR');
  assert.equal((await req('/api/owner/students/'+a.json.user.id+'/evidence',{cookie:a.cookie})).status,403,'student cannot fetch evidence directly');
  assert.equal((await req('/api/owner/students/'+a.json.user.id+'/evidence',{cookie:owner.cookie})).status,200);
  assert.equal((await req('/api/owner/students/approval',{cookie:owner.cookie,method:'POST',value:{userId:a.json.user.id,approval:'rejected'}})).status,200);
