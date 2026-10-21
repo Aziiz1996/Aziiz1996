@@ -121,13 +121,18 @@ async function body(req, maximum = 10 * 1024 * 1024) {
   req.on('error',fail);req.on('aborted',()=>fail(new Error('body-aborted')));
  });
 }
+function canStudy(user) { return !!user && (user.owner || studentAccess.status(user.id).approval === 'approved'); }
+function safeAccount(user, extra = {}) {
+ if (!canStudy(user)) return { ...extra, user:userJson(user), data:emptyData() };
+ return accountJson(withSharedContent(user),extra);
+}
 function session(res, user, extra = {}) {
- user = withSharedContent(user);
+ if (canStudy(user)) user = withSharedContent(user);
  db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
  const token = randomBytes(32).toString('hex');
  db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token), user.id, expiry());
  res.setHeader('Set-Cookie', cookie(token));
- json(res, 200, { ...extra, user:userJson(user), data: JSON.parse(user.data) });
+ json(res, 200, safeAccount(user, extra));
 }
 function validOrigin(req) {
  try { const origin = new URL(req.headers.origin || ''); return origin.host === req.headers.host && ['http:', 'https:'].includes(origin.protocol); } catch { return false; }
@@ -228,6 +233,7 @@ const server = http.createServer(async (req, res) => {
     if(!bytes)return json(res,404,{error:'لم يقدم الطالب إثباتًا.'});
     res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="enrollment.pdf"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return res.end(bytes);
    }
+   if (!canStudy(user) && !['/api/auth/session','/api/auth/logout','/api/auth/password','/api/auth/recovery-code','/api/auth/claim-owner'].includes(path)) return json(res,403,{error:'المحاضرات والمشاريع متاحة بعد اعتماد القيد الجامعي من الإدارة فقط.'});
    if(path==='/api/student/restricted'&&req.method==='GET'){
     const access=studentAccess.status(user.id);
     if(user.owner||access.approval!=='approved'||!access.phoneVerified)return json(res,403,{error:'الوصول يتطلب طالبًا معتمدًا وهاتفًا موثّقًا بشكل مستقل.'});
@@ -312,8 +318,7 @@ const server = http.createServer(async (req, res) => {
     return json(res,404,{error:'المسار غير موجود.'});
    }
    if (path === '/api/auth/session' && req.method === 'GET') {
-    const hydrated = withSharedContent(user);
-    return json(res, 200, { user:userJson(hydrated), data: JSON.parse(hydrated.data) });
+    return json(res, 200, safeAccount(user));
    }
    if (['/api/auth/recovery-code', '/api/auth/password'].includes(path) && req.method === 'POST') {
     const key = 'credential:' + user.id; const now = Date.now(); let record = attempts.get(key);
