@@ -34,7 +34,8 @@ test('owner alone can approve students; phone verification and project membershi
  assert.equal((await request('/api/owner/students/approval',{userId:student.value.user.id,approval:'approved'},owner.cookie)).status,200);
  assert.equal((await request('/api/student/access',null,student.cookie)).value.approval,'approved');
  assert.equal((await request('/api/student/restricted',null,student.cookie)).status,403);
- assert.equal((await request('/api/projects',null,student.cookie)).value.assignedGroup,null);
+ assert.equal((await request('/api/projects',null,student.cookie)).status,200);
+ assert.equal((await request('/api/academic/shared',null,student.cookie)).status,200);
  assert.equal((await request('/api/auth/session',null,student.cookie)).value.user.owner,false);
 });
 

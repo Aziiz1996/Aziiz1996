@@ -43,6 +43,9 @@ function seedDatabase(path) {
   insert('shared-owner', owner, 'a'.repeat(64), 1);
   insert('shared-legacy', legacy, 'b'.repeat(64));
   insert('shared-capacity', capacity, 'c'.repeat(64));
+  database.exec("CREATE TABLE student_access (user_id TEXT PRIMARY KEY, approval TEXT NOT NULL CHECK(approval IN ('pending','approved','rejected')))");
+  database.prepare("INSERT INTO student_access VALUES (?,'approved')").run('shared-legacy');
+  database.prepare("INSERT INTO student_access VALUES (?,'approved')").run('shared-capacity');
   database.close();
   return { owner, legacy, capacity };
 }
@@ -132,6 +135,14 @@ test('shared academics migrate existing SQLite accounts and stay independent fro
     await t.test('new account registration receives real weekly appointments, exams and shared study resources', async () => {
       registered = await request('/api/auth/register', { method:'POST', value:{ username:'new-academic-member@example.test', password:PASSWORD } });
       assert.equal(registered.response.status, 200); assert.equal(registered.json.user.owner, false);
+      assert.equal(registered.json.data.courses.length,0);
+      assert.equal((await request('/api/academic/shared',{cookie:registered.cookie})).response.status,403);
+      const database=new DatabaseSync(databasePath);
+      database.prepare("INSERT INTO student_access VALUES (?,'approved')").run(registered.json.user.id);
+      database.close();
+      const previousCookie=registered.cookie;
+      registered=await request('/api/auth/session',{cookie:previousCookie});
+      registered.cookie=previousCookie;
       assertStarter(registered.json.data);
       assert.deepEqual(registered.json.data.transactions, []);
       assert.equal(registered.json.data.settings.name, 'new-academic-member@example.test');

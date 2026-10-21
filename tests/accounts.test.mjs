@@ -33,8 +33,16 @@ test('account isolation, signout, owner files, origin checks, and password hashi
   const owner = await request('/api/auth/register', { method:'POST', value:{ username:'owner@example.com', password:'synthetic-password-one', ownerKey:'synthetic-owner-setup-key' } });
   assert.equal(owner.response.status,200); assert.equal(owner.json.user.owner,true);
   assert.match(owner.response.headers.get('set-cookie'), /HttpOnly/);
-  const member = await request('/api/auth/register', { method:'POST', value:{ username:'member@example.com', password:'synthetic-password-two' } });
+  let member = await request('/api/auth/register', { method:'POST', value:{ username:'member@example.com', password:'synthetic-password-two' } });
   assert.equal(member.response.status,200); assert.equal(member.json.user.owner,false);
+  assert.equal(member.json.data.courses.length,0);
+  const {DatabaseSync:FixtureDB}=await import('node:sqlite');
+  const fixtureDB=new FixtureDB(join(directory,'leader.sqlite'));
+  fixtureDB.prepare("INSERT INTO student_access(user_id,approval) VALUES(?,'approved')").run(member.json.user.id);
+  fixtureDB.close();
+  const memberCookie=member.cookie;
+  member=await request('/api/auth/session',{cookie:memberCookie});
+  member.cookie=memberCookie;
   assert.equal(member.json.data.lectures.length, 5);
   assert.equal(member.json.data.notes.length, STARTER_NOTES);
   assert.equal(member.json.data.quizzes[0].questions.length,40);
