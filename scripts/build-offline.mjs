@@ -12,11 +12,11 @@ self.addEventListener('fetch', event => {
  const request = event.request;
  const url = new URL(request.url);
  if (request.method !== 'GET' || url.origin !== self.location.origin || !url.href.startsWith(self.registration.scope)) return;
+ if (url.pathname.includes('/api/') || url.pathname.includes('/personal-lessons/')) return;
  if (request.mode === 'navigate') {
   event.respondWith(fetch(request).catch(async () => (await caches.match(new URL('./index.html', self.registration.scope))) || Response.error()));
   return;
  }
- if (url.pathname.includes('/api/') || url.pathname.includes('/personal-lessons/')) return;
  event.respondWith(caches.open(CACHE).then(async cache => {
   const saved = await cache.match(request);
   if (saved) return saved;

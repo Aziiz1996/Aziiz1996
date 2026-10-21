@@ -1,3 +1,4 @@
+import { createStudentAccess } from './student-access.mjs';
 import http from 'node:http';
 import { createSignupService } from './signup.mjs';
 import { getStudentProfile } from '../src/dataExtensions.ts';
@@ -36,6 +37,7 @@ const projectNumbers=new Set(PROJECT_GROUP_CATALOG.map(g=>g.group));
 function group3Allowed(user) { return !!user && (!!user.owner || !!db.prepare('SELECT 1 FROM group3_members WHERE user_id=?').get(user.id)); }
 
 const signup = createSignupService(db);
+const studentAccess = createStudentAccess(db);
 const tutorMemory = createTutorMemory();
 const ownerDesign = createOwnerDesignService(db);
 const staticRoot = resolve(process.env.LEADER_STATIC_DIR || 'dist');
@@ -103,11 +105,10 @@ function userJson(user) {
  const assigned=!!db.prepare('SELECT id FROM users WHERE owner=1').get();
  const keyRequired=!!process.env.LEADER_OWNER_SETUP_KEY;
  const first=db.prepare('SELECT id FROM users ORDER BY rowid LIMIT 1').get();
- return {id:user.id,username:user.username,owner:!!user.owner,canClaimOwner:!assigned&&(!ownerEmail||user.username===ownerEmail)&&(keyRequired||(!ownerEmail&&first?.id===user.id)),ownerKeyRequired:keyRequired};
+ return {id:user.id,username:user.username,owner:!!user.owner,...studentAccess.status(user.id),canClaimOwner:!assigned&&(!ownerEmail||user.username===ownerEmail)&&(keyRequired||(process.env.NODE_ENV!=='production'&&!ownerEmail&&first?.id===user.id)),ownerKeyRequired:keyRequired};
 }
 function accountJson(user, extra = {}) { return { ...extra, user:userJson(user), data:JSON.parse(user.data) }; }
-async function body(req) {
- const maximum = 10 * 1024 * 1024;
+async function body(req, maximum = 10 * 1024 * 1024) {
  if (Number(req.headers['content-length']) > maximum) { req.resume(); throw new Error('body-size'); }
  return new Promise((resolveBody, reject) => {
   let count=0, chunks=[], settled=false;
@@ -139,8 +140,9 @@ const server = http.createServer(async (req, res) => {
    if (req.method !== 'GET' && !validOrigin(req)) return json(res, 403, { error: 'الطلب لا يأتي من موقع التطبيق.' });
    if (path === '/api/auth/signup-options' && req.method === 'GET') return json(res,200,{smsEnabled:signup.enabled(),minimumPasswordLength:5});
    if (['/api/auth/check-username','/api/auth/send-otp','/api/auth/verify-otp'].includes(path) && req.method === 'POST') {
-    try{return json(res,200,await signup.handle(path,await body(req),req.socket.remoteAddress||'local'));}
-    catch(error){return json(res,error.status||400,{error:error.message});}
+    if(req.headers['content-type']?.split(';')[0]!=='application/json')return json(res,415,{error:'أرسل بيانات JSON.'});
+    try{return json(res,200,await signup.handle(path,await body(req,2048),req.socket.remoteAddress||'local'));}
+    catch(error){if(error.status===429)res.setHeader('Retry-After',String(error.retryAfter||60));return json(res,error.status||400,{error:error.message});}
    }
    if (path === '/api/auth/recover' && req.method === 'POST') {
     const ip = req.socket.remoteAddress || 'local'; const now = Date.now();
@@ -187,7 +189,7 @@ const server = http.createServer(async (req, res) => {
      // On simple deployments without a setup key, the first account safely closes
      // the one-time owner bootstrap. Hosted deployments can still require a key.
      const ownerEmail=String(process.env.LEADER_OWNER_EMAIL||'').trim().normalize('NFKC').toLowerCase();
-     const owner = !ownerExists && (!ownerEmail||username===ownerEmail) && (validOwnerKey || (!ownerKey && !ownerEmail && accountCount === 0));
+     const owner = !ownerExists && (!ownerEmail||username===ownerEmail) && (validOwnerKey || (process.env.NODE_ENV !== 'production' && !ownerKey && !ownerEmail && accountCount === 0));
      const id = randomUUID(); const data = emptyData(); data.settings.name = username;
      if(details){data.settings.name=details.fullName;data.studentProfile={...getStudentProfile(data),fullName:details.fullName,email:username,phone:details.phone};}
      db.exec('BEGIN IMMEDIATE');
@@ -201,7 +203,7 @@ const server = http.createServer(async (req, res) => {
      const ownerKey = process.env.LEADER_OWNER_SETUP_KEY;
      const ownerExists = !!db.prepare('SELECT id FROM users WHERE owner=1').get();
      const accountCount = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
-     if (!ownerKey && !process.env.LEADER_OWNER_EMAIL && !ownerExists && accountCount === 1) {
+     if (process.env.NODE_ENV !== 'production' && !ownerKey && !process.env.LEADER_OWNER_EMAIL && !ownerExists && accountCount === 1) {
       db.prepare('UPDATE users SET owner=1 WHERE id=?').run(user.id);
       user = db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
      }
@@ -210,6 +212,24 @@ const server = http.createServer(async (req, res) => {
    }
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
+   if(path==='/api/student/access'&&req.method==='GET')return json(res,200,studentAccess.status(user.id));
+   if(path==='/api/student/restricted'&&req.method==='GET'){
+    const access=studentAccess.status(user.id);
+    if(user.owner||access.approval!=='approved'||!access.phoneVerified)return json(res,403,{error:'الوصول يتطلب طالبًا معتمدًا وهاتفًا موثّقًا بشكل مستقل.'});
+    return json(res,200,{access:true,message:'حساب الطالب معتمد. لا يوجد محتوى خاص جديد في هذا الإصدار.'});
+   }
+   if(path==='/api/owner/students'&&req.method==='GET'){
+    if(!user.owner)return json(res,403,{error:'اعتماد الطلاب للمسؤول فقط.'});
+    const offset=Number(new URL(req.url,'http://local').searchParams.get('offset')||0);
+    if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)return json(res,400,{error:'صفحة غير صالحة.'});
+    const rows=db.prepare('SELECT id,username FROM users WHERE owner=0 ORDER BY id LIMIT 101 OFFSET ?').all(offset);
+    return json(res,200,{students:rows.slice(0,100).map(row=>({...row,...studentAccess.status(row.id)})),nextOffset:rows.length>100?offset+100:null});
+   }
+   if(path==='/api/owner/students/approval'&&req.method==='POST'){
+    if(!user.owner)return json(res,403,{error:'اعتماد الطلاب للمسؤول فقط.'});
+    const payload=await body(req);studentAccess.decide(payload.userId,payload.approval,user.id);
+    return json(res,200,{ok:true});
+   }
    if(path==='/api/projects'&&req.method==='GET'){
     const member=db.prepare('SELECT group_number FROM project_memberships WHERE user_id=?').get(user.id);
     const permitted=user.owner?PROJECT_GROUP_CATALOG:PROJECT_GROUP_CATALOG.filter(g=>g.group===member?.group_number);
@@ -399,6 +419,7 @@ const server = http.createServer(async (req, res) => {
    return json(res, 404, { error: 'المسار غير موجود.' });
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'طريقة الطلب غير متاحة.' });
+  if(path==='/quiz'||path==='/quiz/') {res.writeHead(302,{Location:'/quiz/index.html'});return res.end();}
   const decodedPath = decodeURIComponent(path);
   if (decodedPath.includes('\\') || decodedPath.split('/').some(part => part === '.' || part === '..')) return json(res, 404, { error: 'غير موجود.' });
   const privateLesson = decodedPath.replace(/\/+/g, '/').toLowerCase().startsWith('/personal-lessons/');
