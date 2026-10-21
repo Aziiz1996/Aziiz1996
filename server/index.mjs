@@ -1,4 +1,5 @@
 import { createStudentAccess } from './student-access.mjs';
+import { createStudentEvidence } from './student-evidence.mjs';
 import http from 'node:http';
 import { createSignupService } from './signup.mjs';
 import { getStudentProfile } from '../src/dataExtensions.ts';
@@ -38,6 +39,8 @@ function group3Allowed(user) { return !!user && (!!user.owner || !!db.prepare('S
 
 const signup = createSignupService(db);
 const studentAccess = createStudentAccess(db);
+const studentEvidence = createStudentEvidence(db);
+db.exec("CREATE TABLE IF NOT EXISTS project_reviews (group_number INTEGER PRIMARY KEY, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')), reviewed_by TEXT, reviewed_at TEXT);");
 const tutorMemory = createTutorMemory();
 const ownerDesign = createOwnerDesignService(db);
 const staticRoot = resolve(process.env.LEADER_STATIC_DIR || 'dist');
@@ -212,7 +215,19 @@ const server = http.createServer(async (req, res) => {
    }
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
-   if(path==='/api/student/access'&&req.method==='GET')return json(res,200,studentAccess.status(user.id));
+   if(path==='/api/student/access'&&req.method==='GET')return json(res,200,{...studentAccess.status(user.id),evidence:studentEvidence.read(user.id)});
+   if(path==='/api/student/evidence'&&req.method==='POST'){
+    if(user.owner)return json(res,403,{error:'الإثبات مخصص للطلاب.'});
+    try {const payload=await body(req);return json(res,200,{evidence:studentEvidence.submit(user.id,payload.data)});}
+    catch(error){return json(res,400,{error:error.message});}
+   }
+   const evidenceMatch=/^\/api\/owner\/students\/([^/]+)\/evidence$/.exec(path);
+   if(evidenceMatch&&req.method==='GET'){
+    if(!user.owner)return json(res,403,{error:'للمالك فقط.'});
+    const bytes=studentEvidence.bytes(decodeURIComponent(evidenceMatch[1]));
+    if(!bytes)return json(res,404,{error:'لم يقدم الطالب إثباتًا.'});
+    res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="enrollment.pdf"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return res.end(bytes);
+   }
    if(path==='/api/student/restricted'&&req.method==='GET'){
     const access=studentAccess.status(user.id);
     if(user.owner||access.approval!=='approved'||!access.phoneVerified)return json(res,403,{error:'الوصول يتطلب طالبًا معتمدًا وهاتفًا موثّقًا بشكل مستقل.'});
@@ -223,17 +238,25 @@ const server = http.createServer(async (req, res) => {
     const offset=Number(new URL(req.url,'http://local').searchParams.get('offset')||0);
     if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)return json(res,400,{error:'صفحة غير صالحة.'});
     const rows=db.prepare('SELECT id,username FROM users WHERE owner=0 ORDER BY id LIMIT 101 OFFSET ?').all(offset);
-    return json(res,200,{students:rows.slice(0,100).map(row=>({...row,...studentAccess.status(row.id)})),nextOffset:rows.length>100?offset+100:null});
+    return json(res,200,{students:rows.slice(0,100).map(row=>({...row,...studentAccess.status(row.id),evidence:studentEvidence.read(row.id)})),nextOffset:rows.length>100?offset+100:null});
    }
    if(path==='/api/owner/students/approval'&&req.method==='POST'){
     if(!user.owner)return json(res,403,{error:'اعتماد الطلاب للمسؤول فقط.'});
-    const payload=await body(req);studentAccess.decide(payload.userId,payload.approval,user.id);
+    const payload=await body(req);if(payload.approval==='approved'&&!studentEvidence.read(payload.userId))return json(res,400,{error:'لا يمكن اعتماد طالب دون إثبات قيد جامعي.'});studentAccess.decide(payload.userId,payload.approval,user.id);
     return json(res,200,{ok:true});
    }
    if(path==='/api/projects'&&req.method==='GET'){
     const member=db.prepare('SELECT group_number FROM project_memberships WHERE user_id=?').get(user.id);
     const permitted=user.owner?PROJECT_GROUP_CATALOG:PROJECT_GROUP_CATALOG.filter(g=>g.group===member?.group_number);
-    return json(res,200,{suggestions:PROJECT_GROUP_CATALOG.map(g=>({group:g.group,topic:g.topic,week:g.week})),assignedGroup:member?.group_number||null,owner:!!user.owner,documents:permitted.map(g=>({group:g.group,topic:g.topic,document:db.prepare('SELECT filename,length(bytes) AS size,updated_at FROM project_documents WHERE group_number=?').get(g.group)||null}))});
+    return json(res,200,{suggestions:PROJECT_GROUP_CATALOG.map(g=>({group:g.group,topic:g.topic,week:g.week})),assignedGroup:member?.group_number||null,owner:!!user.owner,documents:permitted.map(g=>({group:g.group,topic:g.topic,document:db.prepare('SELECT filename,length(bytes) AS size,updated_at FROM project_documents WHERE group_number=?').get(g.group)||null,review:db.prepare('SELECT status,reviewed_at FROM project_reviews WHERE group_number=?').get(g.group)?.status||'pending'}))});
+   }
+   if(path==='/api/projects/review'&&req.method==='POST'){
+    if(!user.owner)return json(res,403,{error:'مراجعة المشاريع للإدارة فقط.'});
+    const payload=await body(req),group=Number(payload.group),status=payload.status;
+    if(!projectNumbers.has(group)||!['approved','rejected','pending'].includes(status))return json(res,400,{error:'قرار غير صالح.'});
+    if(!db.prepare('SELECT 1 FROM project_documents WHERE group_number=?').get(group))return json(res,404,{error:'لا يوجد مشروع للمراجعة.'});
+    db.prepare('INSERT INTO project_reviews(group_number,status,reviewed_by,reviewed_at) VALUES(?,?,?,?) ON CONFLICT(group_number) DO UPDATE SET status=excluded.status,reviewed_by=excluded.reviewed_by,reviewed_at=excluded.reviewed_at').run(group,status,user.id,new Date().toISOString());
+    return json(res,200,{group,status});
    }
    if(path==='/api/projects/assign'&&req.method==='POST'){
     if(!user.owner)return json(res,403,{error:'تعيين الأعضاء للمسؤول فقط.'});
@@ -260,6 +283,7 @@ const server = http.createServer(async (req, res) => {
      const bytes=Buffer.from(encoded,'base64');
      if(bytes.length<8||bytes.length>5*1024*1024||bytes.subarray(0,5).toString()!=='%PDF-')return json(res,400,{error:'PDF مطلوب بحجم أقل من 5 ميغابايت.'});
      db.prepare('INSERT INTO project_documents(group_number,filename,bytes,updated_by,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(group_number) DO UPDATE SET filename=excluded.filename,bytes=excluded.bytes,updated_by=excluded.updated_by,updated_at=excluded.updated_at').run(group,'project.pdf',bytes,user.id,new Date().toISOString());
+     db.prepare("INSERT INTO project_reviews(group_number,status,reviewed_by,reviewed_at) VALUES(?,'pending',NULL,NULL) ON CONFLICT(group_number) DO UPDATE SET status='pending',reviewed_by=NULL,reviewed_at=NULL").run(group);
      return json(res,200,{saved:true,group,size:bytes.length});
     }
     return json(res,405,{error:'طريقة غير متاحة.'});

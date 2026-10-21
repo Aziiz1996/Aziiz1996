@@ -28,8 +28,11 @@ test('owner alone can approve students; phone verification and project membershi
  const owner=await request('/api/auth/register',{username:'owner@example.test',password:'12345',ownerKey:'synthetic-owner-key'});
  assert.equal(owner.value.user.owner,true);
  assert.equal((await request('/api/owner/students',null,owner.cookie)).value.students.length,1);
+ assert.equal((await request('/api/owner/students/approval',{userId:student.value.user.id,approval:'approved'},owner.cookie)).status,400);
+ const proof=Buffer.from('%PDF-1.4\nstudent enrollment proof\n%%EOF').toString('base64');
+ assert.equal((await request('/api/student/evidence',{data:proof},student.cookie)).status,200);
  assert.equal((await request('/api/owner/students/approval',{userId:student.value.user.id,approval:'approved'},owner.cookie)).status,200);
- assert.deepEqual((await request('/api/student/access',null,student.cookie)).value,{approval:'approved',phoneVerified:false});
+ assert.equal((await request('/api/student/access',null,student.cookie)).value.approval,'approved');
  assert.equal((await request('/api/student/restricted',null,student.cookie)).status,403);
  assert.equal((await request('/api/projects',null,student.cookie)).value.assignedGroup,null);
  assert.equal((await request('/api/auth/session',null,student.cookie)).value.user.owner,false);
