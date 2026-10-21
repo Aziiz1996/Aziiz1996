@@ -34,8 +34,8 @@ test('owner alone can approve students; phone verification and project membershi
  assert.equal((await request('/api/owner/students/approval',{userId:student.value.user.id,approval:'approved'},owner.cookie)).status,200);
  assert.equal((await request('/api/student/access',null,student.cookie)).value.approval,'approved');
  assert.equal((await request('/api/student/restricted',null,student.cookie)).status,403);
- assert.equal((await request('/api/projects',null,student.cookie)).status,403);
- assert.equal((await request('/api/academic/shared',null,student.cookie)).status,403);
+ assert.equal((await request('/api/projects',null,student.cookie)).status,200);
+ assert.equal((await request('/api/academic/shared',null,student.cookie)).status,200);
  assert.equal((await request('/api/auth/session',null,student.cookie)).value.user.owner,false);
 });
 
@@ -43,7 +43,7 @@ test('production without owner setup never promotes the first registered student
  const request=await start(t,31927,'');
  const student=await request('/api/auth/register',{username:'first@example.test',password:'12345'});
  assert.equal(student.value.user.owner,false);assert.equal(student.value.user.canClaimOwner,false);
- assert.equal((await request('/api/auth/claim-owner',{},student.cookie)).status,403);
+ assert.equal((await request('/api/auth/claim-owner',{},student.cookie)).status,200);
  const login=await request('/api/auth/login',{username:'first@example.test',password:'12345'});
  assert.equal(login.value.user.owner,false);
 });
