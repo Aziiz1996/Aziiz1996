@@ -140,7 +140,9 @@ test('shared academics migrate existing SQLite accounts and stay independent fro
       const database=new DatabaseSync(databasePath);
       database.prepare("INSERT INTO student_access VALUES (?,'approved')").run(registered.json.user.id);
       database.close();
-      registered=await request('/api/auth/session',{cookie:registered.cookie});
+      const previousCookie=registered.cookie;
+      registered=await request('/api/auth/session',{cookie:previousCookie});
+      registered.cookie=previousCookie;
       assertStarter(registered.json.data);
       assert.deepEqual(registered.json.data.transactions, []);
       assert.equal(registered.json.data.settings.name, 'new-academic-member@example.test');
