@@ -18,13 +18,13 @@ test('clearing conversation during a pending reply prevents old history from ret
 });
 test('SMS proof is bound to email and phone, limited, expires and is consumed once',async()=>{
  const db=new DatabaseSync(':memory:');let stamp=1000000,calls=0;
- try{const service=createSignupService(db,{env:smsEnv,now:()=>stamp,fetcher:async(url,options)=>{calls++;assert.ok(url.startsWith('https://verify.twilio.com/v2/Services/VA'));assert.ok(options.headers.Authorization.startsWith('Basic '));return {ok:true,json:async()=>({status:url.endsWith('/VerificationCheck')?'approved':'pending'})};}});
- const sent=await service.handle('/api/auth/send-otp',{phone:'0501234567',email:'student@example.test'},'local');assert.match(sent.challenge,/^[a-f0-9]{64}$/);
+ try{const service=createSignupService(db,{env:smsEnv,now:()=>stamp,fetcher:async(url,options)=>{calls++;assert.ok(url.startsWith('https://verify.twilio.com/v2/Services/VA'));assert.ok(options.headers.Authorization.startsWith('Basic '));return {ok:true,json:async()=>({sid:options.body.get('VerificationSid')||'VE'+String(calls).padStart(32,'0'),status:url.endsWith('/VerificationCheck')?'approved':'pending'})};}});
+ const sent=await service.handle('/api/auth/send-otp',{phone:'0501234567',email:'student@example.test',consent:true},'local');assert.match(sent.challenge,/^[a-f0-9]{64}$/);
  const signup={handle:'learner',fullName:'Synthetic Student',phone:'0501234567',challenge:sent.challenge};assert.throws(()=>service.prepare(signup,'student@example.test'));
  assert.equal((await service.handle('/api/auth/verify-otp',{challenge:sent.challenge,code:'123456'},'local')).valid,true);
  assert.throws(()=>service.prepare(signup,'other@example.test'));assert.throws(()=>service.prepare({...signup,phone:'0501234568'},'student@example.test'));
  const first=service.prepare(signup,'student@example.test'),second=service.prepare({...signup,handle:'learner2'},'student@example.test');service.save('one',first);assert.throws(()=>service.save('two',second));
- const expiry=await service.handle('/api/auth/send-otp',{phone:'0501234568',email:'student@example.test'},'local');stamp+=600001;await assert.rejects(service.handle('/api/auth/verify-otp',{challenge:expiry.challenge,code:'123456'},'local'));assert.equal(calls,3);
+ const expiry=await service.handle('/api/auth/send-otp',{phone:'0501234568',email:'student@example.test',consent:true},'local');stamp+=600001;await assert.rejects(service.handle('/api/auth/verify-otp',{challenge:expiry.challenge,code:'123456'},'local'));assert.equal(calls,3);
  }finally{db.close();}
 });
 test('Azure SSML is escaped and audio is private binary, with bounded input',async()=>{
@@ -34,12 +34,12 @@ test('Azure SSML is escaped and audio is private binary, with bounded input',asy
 });
 
 test('SMS checking stops after five guesses and resending is limited per phone',async()=>{
- const db=new DatabaseSync(':memory:');let checks=0;
- try{const service=createSignupService(db,{env:smsEnv,fetcher:async url=>{if(url.endsWith('/VerificationCheck'))checks++;return {ok:true,json:async()=>({status:'pending'})};}});
- const payload={phone:'0501234567',email:'student@example.test'},first=await service.handle('/api/auth/send-otp',payload,'local');
+ const db=new DatabaseSync(':memory:');let checks=0,stamp=1000000;
+ try{const service=createSignupService(db,{env:smsEnv,now:()=>stamp,fetcher:async url=>{if(url.endsWith('/VerificationCheck'))checks++;return {ok:true,json:async()=>({sid:'VE'+'1'.repeat(32),status:'pending'})};}});
+ const payload={phone:'0501234567',email:'student@example.test',consent:true},first=await service.handle('/api/auth/send-otp',payload,'local');
  for(let i=0;i<5;i++)assert.equal((await service.handle('/api/auth/verify-otp',{challenge:first.challenge,code:'000000'},'local')).valid,false);
  await assert.rejects(service.handle('/api/auth/verify-otp',{challenge:first.challenge,code:'000000'},'local'));assert.equal(checks,5);
- await service.handle('/api/auth/send-otp',payload,'local');await service.handle('/api/auth/send-otp',payload,'local');await assert.rejects(service.handle('/api/auth/send-otp',payload,'local'),e=>e.status===429);
+ await assert.rejects(service.handle('/api/auth/send-otp',payload,'local'),e=>e.status===429);stamp+=60001;await service.handle('/api/auth/send-otp',payload,'local');stamp+=60001;await service.handle('/api/auth/send-otp',payload,'local');stamp+=60001;await assert.rejects(service.handle('/api/auth/send-otp',payload,'local'),e=>e.status===429);
  }finally{db.close();}
 });
 test('Claude messages use server-selected history and memory never mixes account IDs',async()=>{
