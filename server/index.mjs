@@ -123,7 +123,12 @@ async function body(req, maximum = 10 * 1024 * 1024) {
 }
 function canStudy(user) { return !!user && (user.owner || studentAccess.status(user.id).approval === 'approved'); }
 function safeAccount(user, extra = {}) {
- if (!canStudy(user)) return { ...extra, user:userJson(user), data:emptyData() };
+ if (!canStudy(user)) {
+  const data=emptyData(), original=JSON.parse(user.data);
+  data.settings={...data.settings,name:original.settings?.name||user.username};
+  if(original.studentProfile)data.studentProfile=original.studentProfile;
+  return { ...extra,user:userJson(user),data };
+ }
  return accountJson(withSharedContent(user),extra);
 }
 function session(res, user, extra = {}) {
@@ -233,7 +238,7 @@ const server = http.createServer(async (req, res) => {
     if(!bytes)return json(res,404,{error:'لم يقدم الطالب إثباتًا.'});
     res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="enrollment.pdf"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});return res.end(bytes);
    }
-   if (!canStudy(user) && !['/api/auth/session','/api/auth/logout','/api/auth/password','/api/auth/recovery-code','/api/auth/claim-owner'].includes(path)) return json(res,403,{error:'المحاضرات والمشاريع متاحة بعد اعتماد القيد الجامعي من الإدارة فقط.'});
+   if (!canStudy(user) && !['/api/auth/session','/api/auth/logout','/api/auth/password','/api/auth/recovery-code','/api/auth/claim-owner','/api/design','/api/news','/api/ai/status','/api/speak'].includes(path)) return json(res,403,{error:'المحاضرات والمشاريع متاحة بعد اعتماد القيد الجامعي من الإدارة فقط.'});
    if(path==='/api/student/restricted'&&req.method==='GET'){
     const access=studentAccess.status(user.id);
     if(user.owner||access.approval!=='approved'||!access.phoneVerified)return json(res,403,{error:'الوصول يتطلب طالبًا معتمدًا وهاتفًا موثّقًا بشكل مستقل.'});
@@ -451,17 +456,25 @@ const server = http.createServer(async (req, res) => {
   if(path==='/quiz'||path==='/quiz/') {res.writeHead(302,{Location:'/quiz/index.html'});return res.end();}
   const decodedPath = decodeURIComponent(path);
   if (decodedPath.includes('\\') || decodedPath.split('/').some(part => part === '.' || part === '..')) return json(res, 404, { error: 'غير موجود.' });
-  const privateLesson = decodedPath.replace(/\/+/g, '/').toLowerCase().startsWith('/personal-lessons/');
+  const normalizedPath=decodedPath.replace(/\/+/g, '/').toLowerCase();
+  const privateLesson=normalizedPath.startsWith('/personal-lessons/');
+  const protectedCourseFile=normalizedPath.startsWith('/course-library/');
   if (privateLesson) {
    const user = current(req);
    if (!user?.owner) return json(res, 404, { error: 'الملف غير متاح لهذا الحساب.' });
    res.setHeader('Cache-Control', 'private, no-store');
   }
+  if(protectedCourseFile){
+   const user=current(req);
+   if(!user)return json(res,401,{error:'سجّل الدخول للوصول إلى ملفات المحاضرات.'});
+   if(!canStudy(user))return json(res,403,{error:'يتطلب الملف اعتماد القيد الجامعي.'});
+   res.setHeader('Cache-Control','private, no-store');
+  }
   const file = resolve(staticRoot, '.' + decodeURIComponent(path === '/' ? '/index.html' : path));
   if (!file.startsWith(staticRoot + sep)) return json(res, 404, { error: 'غير موجود.' });
   let content; try { if (!statSync(file).isFile()) throw new Error(); content = readFileSync(file); } catch { return json(res, 404, { error: 'الملف غير موجود.' }); }
   const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.svg':'image/svg+xml', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.pdf':'application/pdf' };
-  if (!privateLesson) res.setHeader('Cache-Control', path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+  if (!privateLesson && !protectedCourseFile) res.setHeader('Cache-Control', path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
   res.setHeader('Content-Type', types[extname(file)] || 'application/octet-stream'); res.writeHead(200); res.end(req.method === 'HEAD' ? undefined : content);
  } catch (error) { json(res, error.message === 'body-size' ? 413 : 400, { error: error.message === 'body-size' ? 'البيانات أكبر من الحد المسموح: ١٠ ميغابايت.' : 'تعذّر تنفيذ الطلب.' }); }
 });
