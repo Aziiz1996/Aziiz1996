@@ -16,6 +16,10 @@ export function StudentStatus() {
   const [access, setAccess] = useState<Access | null>(null);
   const [error, setError] = useState('');
   const [uploading,setUploading]=useState(false);
+  const [code,setCode]=useState('');
+  const [redeeming,setRedeeming]=useState(false);
+  const [success,setSuccess]=useState(false);
+  async function redeem(){setRedeeming(true);setError('');try{await request('/api/student/redeem-code',{code});setCode('');setSuccess(true);await refresh();window.location.reload();}catch(issue){setError(issue instanceof Error?issue.message:'تعذر اعتماد الرمز');}finally{setRedeeming(false);}}
   async function refresh() {
     try { setAccess(await request('/api/student/access')); setError(''); }
     catch (issue) { setError(issue instanceof Error ? issue.message : 'تعذر التحديث.'); }
@@ -30,6 +34,9 @@ export function StudentStatus() {
   return <details><summary className="btn btn-secondary" onClick={() => { void refresh(); }}>حالة توثيق واعتماد الطالب</summary>
     <div className="stack"><p>التحقق من الهاتف منفصل عن اعتماد الطالب وعن إدارة التطبيق.</p>
       {access && <p>{access.phoneVerified ? 'الهاتف موثّق' : 'الهاتف غير موثّق'} · {labels[access.approval]} · {access.evidence?'إثبات القيد مرفوع':'إثبات القيد غير مرفوع'}</p>}
+      <label>رمز اعتماد الطالب <input type="text" autoComplete="off" value={code} onChange={e=>setCode(e.target.value)} placeholder="أدخل الرمز الذي أعطاك إياه المالك" /></label>
+      <button className="btn btn-primary" disabled={redeeming||!code.trim()} onClick={()=>void redeem()}>اعتماد الحساب بالرمز</button>
+      {success&&<p role="status">تم اعتماد حسابك</p>}
       <label>إثبات القيد الجامعي PDF <input type="file" accept=".pdf,application/pdf" disabled={uploading} onChange={e=>{const file=e.target.files?.[0];if(file)void upload(file);e.target.value='';}} /></label>
       {error && <p role="alert">{error}</p>}<button className="btn btn-secondary" onClick={() => { void refresh(); }}>تحديث الحالة</button>
     </div></details>;
