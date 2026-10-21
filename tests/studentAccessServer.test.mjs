@@ -43,7 +43,7 @@ test('production without owner setup never promotes the first registered student
  const request=await start(t,31927,'');
  const student=await request('/api/auth/register',{username:'first@example.test',password:'12345'});
  assert.equal(student.value.user.owner,false);assert.equal(student.value.user.canClaimOwner,false);
- assert.equal((await request('/api/auth/claim-owner',{},student.cookie)).status,200);
+ assert.equal((await request('/api/auth/claim-owner',{},student.cookie)).status,403);
  const login=await request('/api/auth/login',{username:'first@example.test',password:'12345'});
  assert.equal(login.value.user.owner,false);
 });
