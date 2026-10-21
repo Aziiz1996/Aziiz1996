@@ -225,6 +225,20 @@ const server = http.createServer(async (req, res) => {
    }
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
+   if(path==='/api/student/redeem-code'&&req.method==='POST'){
+    if(user.owner)return json(res,403,{error:'رمز اعتماد الطلاب فقط.'});
+    const key='student-code:'+user.id;
+    const previous=attempts.get(key)||{count:0,until:0};
+    if(previous.until>Date.now())return json(res,429,{error:'محاولات كثيرة. حاول بعد 15 دقيقة.'});
+    const payload=await body(req,2048);
+    const submitted=String(payload.code||'').trim();
+    const configured=process.env.LEADER_STUDENT_ACCESS_CODE||'';
+    const valid=configured.length>=6&&submitted.length===configured.length&&timingSafeEqual(Buffer.from(submitted),Buffer.from(configured));
+    if(!valid){const count=previous.count+1;attempts.set(key,{count:count>=5?0:count,until:count>=5?Date.now()+15*60*1000:0});return json(res,403,{error:'رمز الاعتماد غير صحيح.'});}
+    attempts.delete(key);
+    studentAccess.decide(user.id,'approved','shared-code');
+    return json(res,200,{ok:true,approval:'approved'});
+   }
    if(path==='/api/student/access'&&req.method==='GET')return json(res,200,{...studentAccess.status(user.id),evidence:studentEvidence.read(user.id)});
    if(path==='/api/student/evidence'&&req.method==='POST'){
     if(user.owner)return json(res,403,{error:'الإثبات مخصص للطلاب.'});
