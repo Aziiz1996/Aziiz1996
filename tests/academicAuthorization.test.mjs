@@ -25,7 +25,7 @@ test('unapproved students cannot read academic APIs, group files, or direct PDF 
  const a=await req('/api/auth/register',{method:'POST',value:{username:'a@example.test',password:'12345'}});
  const b=await req('/api/auth/register',{method:'POST',value:{username:'b@example.test',password:'12345'}});
  assert.equal(a.json.user.approval,'pending');
- const academic=['/api/academic/shared','/api/data','/api/projects','/api/projects/3/file','/course-library/sample.pdf'];
+ const academic=['/api/academic/shared','/api/projects','/api/projects/3/file','/course-library/sample.pdf'];
  for(const path of academic){
   assert.equal((await req(path)).status,401,'anonymous '+path);
   assert.equal((await req(path,{cookie:a.cookie})).status,403,'pending '+path);
@@ -37,7 +37,7 @@ test('unapproved students cannot read academic APIs, group files, or direct PDF 
  assert.equal((await req('/api/student/evidence',{cookie:a.cookie,method:'POST',value:{data:proof}})).status,200);
  assert.equal((await req('/api/owner/students/approval',{cookie:owner.cookie,method:'POST',value:{userId:a.json.user.id,approval:'approved'}})).status,200);
  assert.equal((await req('/api/academic/shared',{cookie:a.cookie})).status,200);
- assert.equal((await req('/api/data',{cookie:a.cookie})).status,200);
+ assert.equal((await req('/api/auth/session',{cookie:a.cookie})).json.data.courses.length>0,true);
  assert.equal((await req('/api/projects',{cookie:a.cookie})).status,200);
  assert.equal((await req('/course-library/sample.pdf',{cookie:a.cookie})).status,200);
  assert.equal((await req('/api/projects/3/file',{cookie:a.cookie})).status,403,'approved but not group member');
