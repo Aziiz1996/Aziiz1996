@@ -21,7 +21,7 @@ function loginError(message){return form.replace('ERROR','<p class="error">'+mes
 if(path==='/healthz'){res.writeHead(200,{'Content-Type':'text/plain'});return res.end('ok')}
 if(path==='/robots.txt'){res.writeHead(200,{'Content-Type':'text/plain'});return res.end('User-agent: *\nDisallow: /\n')}
 if(path==='/login'&&req.method==='POST'){
- const origin=req.headers.origin;if(origin){try{if(new URL(origin).host!==req.headers.host){return sendHtml(403,loginError('تعذّر تأكيد صفحة الدخول. افتح الرابط مباشرة ثم حاول مجددًا.'))}}catch{return sendHtml(403,loginError('تعذّر تأكيد صفحة الدخول. افتح الرابط مباشرة ثم حاول مجددًا.'))}}
+ const origin=req.headers.origin;if(origin&&origin!=='null'){try{const postedOrigin=new URL(origin);const publicOrigin='https://abdulaziz-novel-reader.onrender.com';const directOrigin=`${req.socket.encrypted?'https':'http'}://${req.headers.host}`;if(postedOrigin.origin!==publicOrigin&&postedOrigin.origin!==directOrigin){return sendHtml(403,loginError('تعذّر تأكيد صفحة الدخول. افتح الرابط مباشرة ثم حاول مجددًا.'))}}catch{return sendHtml(403,loginError('تعذّر تأكيد صفحة الدخول. افتح الرابط مباشرة ثم حاول مجددًا.'))}}
  let text='';req.on('data',chunk=>{text+=chunk;if(text.length>2048)req.destroy()});req.on('end',()=>{
  const ip=req.headers['x-forwarded-for']?.split(',')[0].trim()||req.socket.remoteAddress;const now=Date.now();let a=attempts.get(ip);if(!a||now-a.start>900000){a={start:now,n:0};attempts.set(ip,a)}
  if(attempts.size>2000)for(const [k,v]of attempts)if(now-v.start>900000)attempts.delete(k);
