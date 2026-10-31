@@ -1,4 +1,5 @@
 import { StudentApprovals } from './StudentAccess';
+import HubSpotSyncPanel from './HubSpotSyncPanel';
 import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, BookOpen, Check, ClipboardList, Download, Eye, FileText, GraduationCap, LayoutDashboard, Palette, Save, Settings2, ShieldCheck, Upload, UserRound, BriefcaseBusiness } from 'lucide-react';
 import { useAuth, type OwnerDesign } from './auth';
@@ -121,6 +122,6 @@ export default function OwnerPage() {
   const { navigate } = useApp();
   return <>
     <SectionHeader eyebrow="مساحتك تحت إدارتك" title="لوحة المالك" description="خصص واجهة التطبيق وأدر بياناتك وحسابك من مكان واحد." />
-    {authenticated && role === 'owner' ? <><StudentApprovals /><OwnerPanel /></> : <div className="notice"><p>هذه اللوحة متاحة لمدير التطبيق فقط.</p><button className="btn btn-secondary" onClick={() => navigate('dashboard')}>العودة للرئيسية</button></div>}
+    {authenticated && role === 'owner' ? <><StudentApprovals /><HubSpotSyncPanel /><OwnerPanel /></> : <div className="notice"><p>هذه اللوحة متاحة لمدير التطبيق فقط.</p><button className="btn btn-secondary" onClick={() => navigate('dashboard')}>العودة للرئيسية</button></div>}
   </>;
 }

@@ -2,6 +2,7 @@ import { createStudentAccess } from './student-access.mjs';
 import { createStudentEvidence } from './student-evidence.mjs';
 import http from 'node:http';
 import { createSignupService } from './signup.mjs';
+import { createHubspotSync } from './hubspot-sync.mjs';
 import { getStudentProfile } from '../src/dataExtensions.ts';
 import { speechEnabled, synthesizeSpeech } from './voice.mjs';
 import { tutorProvider, createTutorMemory } from './tutor-provider.mjs';
@@ -38,6 +39,7 @@ const projectNumbers=new Set(PROJECT_GROUP_CATALOG.map(g=>g.group));
 function group3Allowed(user) { return !!user && (!!user.owner || !!db.prepare('SELECT 1 FROM group3_members WHERE user_id=?').get(user.id)); }
 
 const signup = createSignupService(db);
+const hubspotSync = createHubspotSync(db);
 const studentAccess = createStudentAccess(db);
 const studentEvidence = createStudentEvidence(db);
 db.exec("CREATE TABLE IF NOT EXISTS project_reviews (group_number INTEGER PRIMARY KEY, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')), reviewed_by TEXT, reviewed_at TEXT);");
@@ -151,7 +153,7 @@ const server = http.createServer(async (req, res) => {
   if (path.startsWith('/api/')) {
    if (!['GET', 'POST', 'PUT', 'DELETE'].includes(req.method)) return json(res, 405, { error: 'طريقة الطلب غير متاحة.' });
    if (req.method !== 'GET' && !validOrigin(req)) return json(res, 403, { error: 'الطلب لا يأتي من موقع التطبيق.' });
-   if (path === '/api/auth/signup-options' && req.method === 'GET') return json(res,200,{smsEnabled:signup.enabled(),minimumPasswordLength:5});
+   if (path === '/api/auth/signup-options' && req.method === 'GET') return json(res,200,{smsEnabled:signup.enabled(),hubspotEnabled:hubspotSync.configured(),minimumPasswordLength:5});
    if (['/api/auth/check-username','/api/auth/send-otp','/api/auth/verify-otp'].includes(path) && req.method === 'POST') {
     if(req.headers['content-type']?.split(';')[0]!=='application/json')return json(res,415,{error:'أرسل بيانات JSON.'});
     try{return json(res,200,await signup.handle(path,await body(req,2048),req.socket.remoteAddress||'local'));}
@@ -209,6 +211,10 @@ const server = http.createServer(async (req, res) => {
      try{db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?)').run(id,username,salt,passwordHash,owner?1:0,JSON.stringify(data));signup.save(id,details);db.exec('COMMIT');}
      catch(error){db.exec('ROLLBACK');if(error.message.startsWith('انتهت صلاحية التحقق'))return json(res,400,{error:error.message});return json(res,409,{error:'تعذر إكمال التسجيل. قد يكون البريد أو اسم المستخدم قد استُخدم؛ تحقق من البيانات وأعد المحاولة.'});}
      user = db.prepare('SELECT * FROM users WHERE id=?').get(id);
+     if (payload.signup?.hubspotConsent === true && hubspotSync.configured()) {
+      try { hubspotSync.queueUser(user.id); void hubspotSync.processPending().catch(() => {}); }
+      catch { console.warn('HubSpot consent could not be queued; account registration succeeded.'); }
+     }
     } else {
      const expected = user ? Buffer.from(user.password_hash, 'hex') : Buffer.alloc(64);
      const actual = Buffer.from(await scrypt(password, user?.salt || 'invalid-user-salt', 64));
@@ -225,6 +231,19 @@ const server = http.createServer(async (req, res) => {
    }
    const user = current(req);
    if (!user) return json(res, 401, { error: 'سجّل الدخول للمتابعة.' });
+   if (path === '/api/owner/hubspot/status' && req.method === 'GET') {
+    if (!user.owner) return json(res,403,{error:'إعداد HubSpot متاح لمالك التطبيق فقط.'});
+    return json(res,200,hubspotSync.status());
+   }
+   if (path === '/api/owner/hubspot/backfill' && req.method === 'POST') {
+    if (!user.owner) return json(res,403,{error:'مزامنة HubSpot متاحة لمالك التطبيق فقط.'});
+    if (!hubspotSync.configured()) return json(res,503,{error:'أضف HUBSPOT_ACCESS_TOKEN في إعدادات Environment لخدمة Render أولًا.'});
+    try {
+     const queued=hubspotSync.queueExistingAccounts();
+     void hubspotSync.processPending().catch(() => {});
+     return json(res,202,{queued,status:hubspotSync.status()});
+    } catch { return json(res,500,{error:'تعذر تجهيز مزامنة الحسابات. لم تُرسل بيانات إلى HubSpot.'}); }
+   }
    if(path==='/api/student/redeem-code'&&req.method==='POST'){
     if(user.owner)return json(res,403,{error:'رمز اعتماد الطلاب فقط.'});
     const key='student-code:'+user.id;
