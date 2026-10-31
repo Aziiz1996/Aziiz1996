@@ -43,6 +43,7 @@ export default function HubSpotSyncPanel() {
     {message && <p role="status">{message}</p>}{error && <p className="notice danger" role="alert">{error}</p>}
     <button className="btn btn-primary" type="button" disabled={busy || !status?.configured} onClick={() => void backfill()}><RefreshCw size={17} />{busy ? 'جارٍ تجهيز المزامنة…' : 'مزامنة الحسابات الحالية'}</button>
     <p className="muted">المزامنة تستخدم البريد لتحديث جهة الاتصال المطابقة أو إنشاء جهة جديدة. لا تتضمن كلمات المرور أو ملفات الدراسة.</p>
-    {status?.synced > 0 && <span className="field-hint"><Check size={15} /> تمت مزامنة حسابات إلى HubSpot.</span>}
+    {(status?.synced ?? 0) > 0 && <span className="field-hint"><Check size={15} /> تمت مزامنة حسابات إلى HubSpot.</span>}
   </section>;
 }
+
