@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>واجبات ومشاريع الكلية</title>
+<style>
+:root{color-scheme:dark;--bg:#0e1823;--panel:#172638;--line:#30475c;--ink:#f0f6fa;--muted:#b1c3d3;--accent:#79e3c7;--warm:#ffd489}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 "Segoe UI",Tahoma,sans-serif}main{max-width:1100px;margin:auto;padding:40px 20px 64px}header{border-bottom:1px solid var(--line);padding:0 0 25px}h1,h2,h3,p{margin:0}h1{font-size:clamp(2rem,6vw,3.5rem);line-height:1.25;margin:10px 0}h2{font-size:1.55rem;margin-bottom:12px}h3{font-size:1.12rem}.eyebrow,a{color:var(--accent)}.muted,small{color:var(--muted)}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0 28px}.stat,article,.meeting{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}.stat strong{display:block;font-size:1.9rem;line-height:1.2}.filters{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 18px}label{display:grid;gap:4px;color:var(--muted);flex:1 1 180px}select,button{font:inherit;color:var(--ink);background:#20354a;border:1px solid #527087;border-radius:8px;padding:8px 12px}button{cursor:pointer}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:12px}.card-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.badge{border:1px solid var(--line);padding:1px 8px;border-radius:20px;font-size:.85rem}article p{margin:6px 0}.meeting{margin-top:32px}.meeting p{margin-bottom:12px}a:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}footer{margin-top:24px}@media(max-width:480px){main{padding-top:24px}.stat{padding:10px}.stat strong{font-size:1.5rem}.stat span{font-size:.86rem}}
+</style>
+</head>
+<body>
+<main>
+<header><span class="eyebrow">دبلوم إدارة اللوجستيات وسلاسل الإمداد</span><h1>واجبات ومشاريع الكلية</h1><p class="muted">المقررات الخمسة · آخر مراجعة في مودل: ٩ نوفمبر ٢٠٢٦</p></header>
+<section class="summary" aria-label="ملخص التكليفات">
+<div class="stat"><strong id="count-all"></strong><span>إجمالي الأنشطة</span></div>
+<div class="stat"><strong id="count-assignments"></strong><span>واجبات</span></div>
+<div class="stat"><strong id="count-projects"></strong><span>مشاريع</span></div>
+</section>
+<section aria-labelledby="tasks-title">
+<h2 id="tasks-title">التكليفات</h2>
+<div class="filters">
+<label>المقرر<select id="course"><option value="">كل المقررات</option></select></label>
+<label>النوع<select id="kind"><option value="">الكل</option><option>واجب</option><option>مشروع</option></select></label>
+</div>
+<p class="muted" id="match-count" aria-live="polite"></p>
+<div class="cards" id="cards"></div>
+</section>
+<footer class="muted">المواعيد بتوقيت السعودية. راجع مودل لأي تعديل على المواعيد. <a href="https://lms.ac-seu.com/my/courses.php" target="_blank" rel="noopener noreferrer">فتح مقررات مودل</a></footer>
+</main>
+<script>
+const courses = {
+  business: 'مبادئ إدارة الأعمال',
+  supply: 'إدارة سلاسل الإمداد',
+  procurement: 'إدارة المشتريات والعقود والمناقصات',
+  inventory: 'إدارة المخزون والمخازن',
+  shipping: 'إدارة النقل والشحن الدولي'
+};
+const tasks = [
+  {course:'business',kind:'واجب',id:206167,due:'٢٦ نوفمبر · ١١:٥٩ م',note:'أُتيح في ٥ نوفمبر ضمن الأسبوع الخامس.'},
+  {course:'business',kind:'مشروع',id:206168,due:'بداية ٣٠ أغسطس · ١٢:٠٠ ص'},
+  {course:'supply',kind:'واجب',id:206269,due:'١٠ أكتوبر · ١١:٠٠ م'},
+  {course:'supply',kind:'مشروع',id:206270,due:'٢٩ نوفمبر · ١١:٥٩ م',note:'كل طالب يرفع نسخة من مشروع مجموعته بشكل فردي.'},
+  {course:'procurement',kind:'واجب',id:206371,due:'بداية ٣٠ نوفمبر · ١٢:٠٠ ص'},
+  {course:'procurement',kind:'مشروع',id:206372,due:'بداية ٣٠ نوفمبر · ١٢:٠٠ ص'},
+  {course:'inventory',kind:'واجب',id:206473,due:'بداية ٣٠ أغسطس · ١٢:٠٠ ص'},
+  {course:'inventory',kind:'مشروع',id:206474,due:'بداية ٣٠ أغسطس · ١٢:٠٠ ص'},
+  {course:'shipping',kind:'واجب',title:'تحليل مستندات الشحن والتخليص الجمركي',id:206575,due:'بداية ٣٠ أغسطس · ١٢:٠٠ ص'},
+  {course:'shipping',kind:'مشروع',id:206576,due:'بداية ٣٠ أغسطس · ١٢:٠٠ ص'}
+];
+const $ = id => document.getElementById(id);
+const number = new Intl.NumberFormat('ar-SA');
+$('count-all').textContent = number.format(tasks.length);
+$('count-assignments').textContent = number.format(tasks.filter(task => task.kind === 'واجب').length);
+$('count-projects').textContent = number.format(tasks.filter(task => task.kind === 'مشروع').length);
+for (const [id, name] of Object.entries(courses)) $('course').add(new Option(name,id));
+function render() {
+  const visible = tasks.filter(task => ['course','kind'].every(key => !$(key).value || $(key).value === task[key]));
+  $('match-count').textContent = visible.length ? number.format(visible.length) + ' من الأنشطة' : 'ما فيه أنشطة تطابق الفلاتر.';
+  $('cards').innerHTML = visible.map(task => `
+    <article>
+      <div class="card-top"><span class="badge">${task.kind}</span></div>
+      <h3>${courses[task.course]}</h3>
+      ${task.title ? '<p>' + task.title + '</p>' : ''}
+      <p class="muted">آخر موعد · ${task.due}</p>
+      ${task.note ? '<p>' + task.note + '</p>' : ''}
+      <a href="https://lms.ac-seu.com/mod/assign/view.php?id=${task.id}" target="_blank" rel="noopener noreferrer" aria-label="فتح ${task.kind} ${courses[task.course]} في مودل">فتح في مودل ↗</a>
+    </article>`).join('');
+}
+for (const key of ['course','kind']) $(key).addEventListener('change',render);
+render();
+</script>
+</body>
+</html>

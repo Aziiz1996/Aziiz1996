@@ -486,16 +486,6 @@ const server = http.createServer(async (req, res) => {
    return json(res, 404, { error: 'المسار غير موجود.' });
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'طريقة الطلب غير متاحة.' });
-  if (path === '/coursework' || path === '/coursework/') {
-   const user = current(req);
-   if (user && !user.owner) return json(res, 403, { error: 'هذه اللوحة خاصة بمالك حساب عز اللوجستيات.' });
-   const encodedPage = process.env.LEADER_COURSEWORK_HTML_BASE64;
-   if (user && !encodedPage) return json(res, 503, { error: 'لوحة الواجبات والمشاريع غير متاحة حاليًا.' });
-   const page = user ? Buffer.from(encodedPage, 'base64') :
-    '<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>واجبات ومشاريع الكلية</title><h1>واجبات ومشاريع الكلية</h1><p><a href="/" target="_blank" rel="noopener noreferrer">سجّل الدخول في عز اللوجستيات</a>، ثم ارجع لهذه الصفحة وحدّثها.</p></html>';
-   res.writeHead(user ? 200 : 401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store' });
-   return res.end(req.method === 'HEAD' ? undefined : page);
-  }
   if(path==='/quiz'||path==='/quiz/') {res.writeHead(302,{Location:'/quiz/index.html'});return res.end();}
   const decodedPath = decodeURIComponent(path);
   if (decodedPath.includes('\\') || decodedPath.split('/').some(part => part === '.' || part === '..')) return json(res, 404, { error: 'غير موجود.' });
@@ -513,7 +503,8 @@ const server = http.createServer(async (req, res) => {
    if(!canStudy(user))return json(res,403,{error:'يتطلب الملف اعتماد القيد الجامعي.'});
    res.setHeader('Cache-Control','private, no-store');
   }
-  const file = resolve(staticRoot, '.' + decodeURIComponent(path === '/' ? '/index.html' : path));
+  const staticPath = path === '/' ? '/index.html' : path === '/coursework' || path === '/coursework/' ? '/coursework.html' : path;
+  const file = resolve(staticRoot, '.' + decodeURIComponent(staticPath));
   if (!file.startsWith(staticRoot + sep)) return json(res, 404, { error: 'غير موجود.' });
   let content; try { if (!statSync(file).isFile()) throw new Error(); content = readFileSync(file); } catch { return json(res, 404, { error: 'الملف غير موجود.' }); }
   const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.svg':'image/svg+xml', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.pdf':'application/pdf' };
